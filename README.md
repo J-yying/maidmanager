@@ -32,6 +32,14 @@ npm run build # 生成生产环境静态文件
 ## 部署提示
 - 生产环境建议使用 `systemd` 或进程管理器（如 uvicorn + Nginx 反代）。
 - 将 SSH 访问与应用服务端口分开，并使用防火墙/安全组限制。
+
+## 服务器一键部署脚本
+在服务器（/root/np）已配置 SSH Key 且 Nginx/systemd 现有配置不变的情况下，可直接运行：
+```bash
+cd /root/np
+./scripts/deploy.sh
+```
+脚本会执行：`git pull --ff-only origin main` → 创建/使用 `.venv` 并安装依赖 → 构建前端 (`npm ci && npm run build`) → 同步静态到 `/var/www/maidmanager-frontend` → `systemctl restart maidmanager` 与 `systemctl reload nginx`。运行前请确保工作区干净（脚本会检测）。
 =======
 # maidmanager
 店铺管理系统，可应用于多数上钟型的店铺进行人员，排班，成本管理
