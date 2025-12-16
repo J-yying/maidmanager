@@ -1,6 +1,7 @@
+<<<<<<< HEAD
 # MaidManager
 
-FastAPI 后端与 Vite 前端的女仆店内部管理系统（MVP）。
+店铺管理系统，可应用于多数上钟型的店铺进行人员、排班、成本管理。FastAPI 后端与 Vite 前端的女仆店内部管理系统（MVP）。
 
 ## 环境要求
 - Python 3.10+
@@ -31,3 +32,7 @@ npm run build # 生成生产环境静态文件
 ## 部署提示
 - 生产环境建议使用 `systemd` 或进程管理器（如 uvicorn + Nginx 反代）。
 - 将 SSH 访问与应用服务端口分开，并使用防火墙/安全组限制。
+=======
+# maidmanager
+店铺管理系统，可应用于多数上钟型的店铺进行人员，排班，成本管理
+>>>>>>> origin/main
