@@ -29,9 +29,10 @@
       <el-table-column prop="work_date" label="日期" width="120" />
       <el-table-column prop="start_time" label="开始时间" width="120" />
       <el-table-column prop="end_time" label="结束时间" width="120" />
-      <el-table-column label="操作" width="140" align="center">
+      <el-table-column label="操作" width="200" align="center">
         <template #default="{ row }">
           <el-button size="small" type="primary" @click="openEdit(row)">编辑</el-button>
+          <el-button size="small" type="danger" @click="confirmDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -186,6 +187,28 @@ const openEdit = (row) => {
   form.start = formatTime(row.start_time);
   form.end = formatTime(row.end_time);
   dialogVisible.value = true;
+};
+
+const confirmDelete = (row) => {
+  ElMessageBox.confirm(
+    "删除前请确保当日该员工的预约/订单已取消。确定删除该排班？",
+    "删除确认",
+    {
+      type: "warning",
+      confirmButtonText: "删除",
+      cancelButtonText: "取消"
+    }
+  )
+    .then(async () => {
+      try {
+        await api.delete(`/roster/${row.id}`);
+        ElMessage.success("删除排班成功");
+        fetchRoster();
+      } catch (err) {
+        ElMessage.error(err?.response?.data?.detail || "删除排班失败");
+      }
+    })
+    .catch(() => {});
 };
 
 const submitForm = async () => {

@@ -198,6 +198,51 @@ def copy_work_shifts(
     return new_shifts
 
 
+@router.delete(
+    "/{shift_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="删除排班（需无预约/订单）",
+)
+def delete_work_shift(
+    shift_id: int,
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
+) -> None:
+    """删除排班：若当日该员工存在未取消的预约/订单（含进行中、已完成等），不允许删除。"""
+    db_shift = (
+        db.query(models.WorkShift)
+        .filter(
+            models.WorkShift.id == shift_id,
+            models.WorkShift.owner == current_account["username"],
+        )
+        .first()
+    )
+    if not db_shift:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="排班不存在"
+        )
+
+    # 检查当日同员工的非取消订单
+    conflict_order = (
+        db.query(models.Order)
+        .filter(
+            models.Order.staff_id == db_shift.staff_id,
+            models.Order.order_date == db_shift.work_date,
+            models.Order.owner == current_account["username"],
+            models.Order.status != "cancelled",
+        )
+        .first()
+    )
+    if conflict_order:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="存在该员工当日的预约/订单，需先取消后再删除排班",
+        )
+
+    db.delete(db_shift)
+    db.commit()
+
+
 @router.put(
     "/{shift_id}",
     response_model=schemas.WorkShiftRead,

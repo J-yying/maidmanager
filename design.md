@@ -1,160 +1,214 @@
+# MaidManager 概要设计（表格版）
 
------
+## 1. 整体架构与运行环境
+- 前端：Vue3 + Vite，静态资源由 Nginx 提供；通过 `/api` 访问后端。
+- 后端：FastAPI + SQLite（可迁移至 MySQL/PostgreSQL）；uvicorn 提供服务，Nginx 反代；systemd 管理进程。
+- 鉴权与隔离：登录返回伪 token（`Bearer fake-token-<username>`），前端存储；后端所有数据带 `owner` 字段，接口按账号过滤。
+- 部署：`scripts/deploy.sh` 自动执行 git pull、依赖安装、前端构建、静态同步、重启后端与 Nginx。
 
-### 一、 技术架构选型 (Tech Stack)
+## 2. 数据模型与字段
+### 2.1 员工 Staff
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | int | 主键 |
+| name | str | 姓名 |
+| phone | str | 电话（可空） |
+| status | str | 状态：active（在职）/resigned（离职） |
+| commission_type | str | 提成类型：percentage（比例）/fixed（固定金额） |
+| commission_value | float | 提成数值：比例用小数（0.5 表示 50%），固定为元 |
+| owner | str | 账号归属，用于数据隔离 |
 
-为了让你能最快在本地电脑（Windows/Mac）上把系统跑起来：
+### 2.2 套餐 ServicePackage
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | int | 主键 |
+| name | str | 套餐名称 |
+| duration_minutes | int | 套餐时长（分钟） |
+| price | float | 套餐金额（元） |
+| default_commission | float | 默认提成（元，固定模式参考） |
+| description | str | 描述（可空） |
+| owner | str | 数据归属 |
 
-  * **后端框架：** **Python FastAPI**
-      * *理由：* 现代化、速度快、代码极简。自带 Swagger UI 文档（写完接口打开浏览器就能测，非常适合不需要专门前端配合的独立开发）。
-  * **数据库：** **SQLite**
-      * *理由：* 无需安装任何软件，就是一个文件（`maid_system.db`）。Python 原生支持，以后要迁移到 MySQL/PostgreSQL 改一行配置就行。
-  * **前端框架：** **Vue 3 + Element Plus (PC端) / Vant UI (移动端)**
-      * *理由：* 这是一个管理后台，Element Plus 提供了现成的表格、日历、表单组件。如果是简单的 Mobile Web，可以通过 CSS 适配，或者混用组件库。
-  * **运行环境：** 本地 `localhost`。
+### 2.3 员工套餐提成 StaffPackageCommission
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | int | 主键 |
+| staff_id | int | 员工ID |
+| package_id | int | 套餐ID |
+| commission_amount | float | 提成金额（元） |
+| owner | str | 数据归属 |
 
------
+### 2.4 排班 WorkShift
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | int | 主键 |
+| staff_id | int | 员工ID |
+| work_date | str | 日期 YYYY-MM-DD |
+| start_time | str | 开始时间 HH:MM:ss |
+| end_time | str | 结束时间 HH:MM:ss |
+| owner | str | 数据归属（唯一约束：owner + work_date + staff_id） |
 
-### 二、 数据库详细设计 (Schema)
+### 2.5 订单 Order
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | int | 主键 |
+| staff_id | int | 员工ID |
+| customer_name | str | 客户名称（可空） |
+| order_date | str | 下单日期 YYYY-MM-DD |
+| start_datetime | str | 开始时间 YYYY-MM-DD HH:MM:ss |
+| end_datetime | str | 结束时间 YYYY-MM-DD HH:MM:ss |
+| duration_minutes | int | 时长（分钟） |
+| total_amount | float | 实收金额（元，含续钟累加） |
+| package_id | int | 套餐ID（可空） |
+| package_name | str | 套餐名称快照（可空） |
+| extra_amount | float | 额外金额（续钟/加项） |
+| payment_method | str | 支付方式：wechat/alipay/cash（可空） |
+| commission_amount | float | 提成金额（元） |
+| status | str | 状态：pending/in_progress/finished/completed/cancelled |
+| note | str | 备注（含续钟记录，可空） |
+| owner | str | 数据归属 |
 
-这是一个基于 **SQLite** 的 SQL 设计（直接复制可以运行）。我针对“排班”和“订单快照”做了特别优化。
+### 2.6 支出 Expense
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | int | 主键 |
+| title | str | 支出标题 |
+| amount | float | 支出金额（元） |
+| expense_date | str | 支出日期 YYYY-MM-DD |
+| note | str | 备注（可空） |
+| owner | str | 数据归属 |
 
-```sql
--- 1. 管理员/投资人表 (最简单的鉴权)
-CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    role TEXT DEFAULT 'manager' -- 'manager'(店长) 或 'investor'(投资人)
-);
+### 2.7 用户 User（预留）
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | int | 主键 |
+| username | str | 用户名 |
+| password_hash | str | 密码哈希 |
+| role | str | 角色（manager/investor 等） |
 
--- 2. 员工表 (女仆档案 & 薪资配置)
-CREATE TABLE staff (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    nickname TEXT,              -- 昵称，如 "小爱"
-    phone TEXT,
-    status TEXT DEFAULT 'active', -- active(在职), resigned(离职)
-    
-    -- 薪资配置 (简化版，直接挂在人身上)
-    base_salary REAL DEFAULT 0,      -- 底薪，如 3000.00
-    commission_type TEXT DEFAULT 'percentage', -- 'percentage'(比例) 或 'fixed'(固定额)
-    commission_value REAL DEFAULT 0, -- 如 0.4 (40%) 或 200 (每单200元)
-    
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+## 3. 接口设计（主要接口，入参/出参表格）
+> 说明：所有接口需带 `Authorization: Bearer fake-token-<username>`；返回统一包含 HTTP 状态码和 JSON 数据（此处列主要字段）。
 
--- 3. 排班时段表 (核心：解决了碎片化排班问题)
-CREATE TABLE work_shifts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    staff_id INTEGER NOT NULL,
-    work_date TEXT NOT NULL,      -- 格式 'YYYY-MM-DD'
-    start_time TEXT NOT NULL,     -- 格式 'HH:MM:ss' (如 '14:00:00')
-    end_time TEXT NOT NULL,       -- 格式 'HH:MM:ss' (如 '22:00:00')
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (staff_id) REFERENCES staff(id)
-);
+### 3.1 登录
+- `POST /api/login`
+  - 入参：
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | username | str | 用户名 |
+    | password | str | 密码 |
+  - 出参：
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | username | str | 用户名 |
+    | role | str | 角色 |
+    | token | str | 伪 token，需放入 Authorization |
 
--- 4. 订单表 (核心：记录收支与提成快照)
-CREATE TABLE orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    staff_id INTEGER NOT NULL,
-    customer_name TEXT,           -- 客户标识，如 "王总"
-    
-    -- 时间记录
-    order_date TEXT NOT NULL,     -- 'YYYY-MM-DD'
-    start_datetime TEXT NOT NULL, -- 'YYYY-MM-DD HH:MM:ss'
-    end_datetime TEXT NOT NULL,   -- 'YYYY-MM-DD HH:MM:ss'
-    duration_minutes INTEGER,     -- 时长，方便统计
-    
-    -- 财务记录
-    total_amount REAL NOT NULL,   -- 实收金额 (营收)
-    payment_method TEXT,          -- 'wechat', 'alipay', 'cash'
-    
-    -- 薪资快照 (重点：下单那一刻算出来的提成，后续改规则不影响旧单)
-    commission_amount REAL DEFAULT 0, 
-    
-    status TEXT DEFAULT 'completed', -- 'completed', 'cancelled'
-    note TEXT,                    -- 备注
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (staff_id) REFERENCES staff(id)
-);
+### 3.2 员工
+- `GET /api/staff`
+  - 入参：| 字段 | 类型 | 说明 |
+          | --- | --- | --- |
+          | status | str | 在职/离职（可选） |
+  - 出参：员工列表（同 Staff 字段）
+- `POST /api/staff` / `PUT /api/staff/{id}`
+  - 入参：name, phone, status, commission_type, commission_value（比例用小数）
+  - 出参：员工对象
+- `GET /api/staff/{id}/package_commissions`
+  - 出参：| 字段 | 类型 | 说明 |
+          | --- | --- | --- |
+          | package_id | int | 套餐ID |
+          | package_name | str | 套餐名称 |
+          | default_commission | float | 套餐默认提成 |
+          | staff_commission | float | 员工定制提成（可空） |
+- `PUT /api/staff/{id}/package_commissions`
+  - 入参：列表，每项 {package_id, commission_amount}；无返回体
 
--- 5. 其他支出表 (投资人记房租水电)
-CREATE TABLE expenses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,          -- 支出项：房租、水电
-    amount REAL NOT NULL,
-    expense_date TEXT NOT NULL,
-    category TEXT,                -- 'rent', 'utilities', 'supplies'
-    note TEXT
-);
-```
+### 3.3 套餐
+- `GET /api/packages`：出参套餐列表
+- `POST /api/packages` / `PUT /api/packages/{id}` / `DELETE /api/packages/{id}`
+  - 入参：name, duration_minutes, price, default_commission, description
+  - 出参：套餐对象（删除无返回体）
 
------
+### 3.4 排班
+- `GET /api/roster`
+  - 入参：| 字段 | 类型 | 说明 |
+          | --- | --- | --- |
+          | date | str | YYYY-MM-DD |
+  - 出参：排班列表（WorkShift 字段）
+- `POST /api/roster`
+  - 入参：staff_id, date, start, end；出参排班对象
+- `PUT /api/roster/{id}`
+  - 入参：start, end；出参排班对象
+- `POST /api/roster/copy`
+  - 入参：from_date, to_date, override（bool）；出参目标日期排班列表
 
-### 三、 后端接口设计 (API Specs)
+### 3.5 订单/预约
+- `GET /api/orders/day_view`
+  - 入参：date（YYYY-MM-DD）
+  - 出参：员工维度的排班 + 订单（包含 pending/in_progress/finished/completed）
+- `GET /api/orders/active`
+  - 入参：date（YYYY-MM-DD）
+  - 出参：当日待开始/进行中/待结算/已完成订单列表
+- `GET /api/available_staff`
+  - 入参：
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | target_time | str | 开始时间 YYYY-MM-DD HH:MM:ss |
+    | duration | int | 时长（分钟） |
+  - 出参：可用员工列表
+- `POST /api/orders`
+  - 入参：staff_id, start_datetime, end_datetime, total_amount, package_id（可空）, extra_amount（可空）, payment_method（可空）, note
+  - 出参：订单对象
+- `PUT /api/orders/{id}`
+  - 入参：可选字段（start/end、total_amount、extra_amount、payment_method、note、status 等）
+  - 出参：订单对象
+- `GET /api/orders`
+  - 入参：from_date, to_date（可选）
+  - 出参：历史订单列表
 
-这里列出核心业务接口，**你可以直接照着这个逻辑去写 Python 代码**。
+### 3.6 支出
+- `GET /api/expenses`
+  - 入参：month（YYYY-MM，可选）
+  - 出参：支出列表（Expense 字段）
+- `POST /api/expenses`
+  - 入参：title, amount, expense_date, note（可空）
+  - 出参：支出对象
+- `PUT /api/expenses/{id}` / `DELETE /api/expenses/{id}`
 
-#### 模块 A：人员与配置 (Staff)
+### 3.7 财务
+- `GET /api/finance/salary_slip`
+  - 入参：month（YYYY-MM）
+  - 出参：工资条列表（员工、底薪、提成、总计）
+- `GET /api/finance/dashboard`
+  - 入参：month（YYYY-MM）
+  - 出参：营收、提成、底薪、支出、净利润
 
-1.  **`POST /api/staff` (新增员工)**
+## 4. 前后端交互与流程
+- 登录后前端保存 token，axios header 自动带 Authorization。
+- 排班创建/编辑后，通过 `/api/orders/day_view` 展示在班色块与订单覆盖。
+- 预约创建：先 `/api/available_staff` 过滤重叠，再 `POST /api/orders` 创建。
+- 开始/续钟/结束/结算：使用 `PUT /api/orders/{id}` 分阶段更新时间、金额、状态；续钟冲突由后端校验。
+- 当日订单视图：`/api/orders/active` 提供待开始/进行中/待结算/已完成（当日）；已完成只读。
+- 支出：录入与列表分栏，删除前端确认后调用 `DELETE`。
+- 财务：按月调用工资条与总览。
 
-      * **输入:** `{ "name": "娜娜", "base_salary": 3000, "commission_value": 0.4 }`
-      * **逻辑:** 简单的 Insert。
+## 5. 业务场景与规则（顺序）
+1) 套餐 → 员工 → 排班 → 预约 → 开始/续钟 → 结束 → 结算
+2) 支出：按日录入、按月查看/编辑/删除
+3) 财务：按月查看工资条与财务总览
+4) 规则与校验：
+   - 排班唯一：owner+日期+员工唯一；启动时去重。
+   - 时间重叠校验：预约/续钟不得与非取消订单重叠（分钟级）。
+   - 状态流转：pending → in_progress → finished → completed；任意阶段可取消。
+   - 结束校验：结束≤开始则自动取消释放占用。
+   - 续钟：延长结束、累加金额/备注，冲突则失败。
+   - 提成：比例小数存储，UI 百分比输入；固定金额可按套餐单独配置。
 
-2.  **`GET /api/staff` (员工列表)**
+## 6. 前端要点
+- 时间轴动态刻度（排班最早/最晚），色块分层：在班/待开始/进行中/已完成。
+- 时间选择支持任意分钟，自动刷新可用员工；进行中可续钟，结束校验时间。
+- 支出录入与列表分栏，删除需确认，表单可重置；提成输入带“%”附加栏。
 
-      * **输出:** 返回所有员工信息。
-
-#### 模块 B：排班管理 (Roster)
-
-3.  **`GET /api/roster?date=2025-11-19` (获取某日排班)**
-
-      * **逻辑:** 查询 `work_shifts` 表，返回当天所有上班的女仆及其时段。
-      * **前端展示:** 根据返回的时间段，渲染甘特图/时间条。
-
-4.  **`POST /api/roster` (新增/修改排班)**
-
-      * **输入:** `{ "staff_id": 1, "date": "2025-11-19", "start": "14:00", "end": "22:00" }`
-      * **逻辑:** 插入数据。*进阶逻辑：检查该时间段是否已经存在，避免重复录入。*
-
-#### 模块 C：业务开单 (Order) —— **逻辑最复杂**
-
-5.  **`GET /api/available_staff` (查询当前空闲女仆)**
-
-      * **场景:** 店长开单时，下拉框里只显示能接单的人。
-      * **输入:** `{ "target_time": "2025-11-19 15:00:00", "duration": 60 }` (查下午3点做1小时谁有空)
-      * **逻辑 (后端核心算法):**
-        1.  `Select * from work_shifts` where 时间覆盖了 15:00-16:00。
-        2.  `Select * from orders` where 此人已经在 15:00-16:00 有单子了。
-        3.  **集合做减法**：(排班的人) - (正在忙的人) = **可用列表**。
-
-6.  **`POST /api/orders` (创建订单/结账)**
-
-      * **输入:** `{ "staff_id": 1, "customer": "王总", "amount": 600, "start": "...", "end": "..." }`
-      * **逻辑:**
-        1.  读取 `staff` 表，获取该员工当前的 `commission_value` (比如 0.4)。
-        2.  计算提成：`600 * 0.4 = 240`。
-        3.  将 `240` 写入 `orders.commission_amount` 字段 (快照)。
-        4.  保存订单。
-
-#### 模块 D：财务报表 (Finance)
-
-7.  **`GET /api/finance/salary_slip?month=2025-11` (工资条)**
-
-      * **逻辑:**
-          * `底薪` = 查询 staff.base\_salary
-          * `提成总额` = Sum(orders.commission\_amount) where month='2025-11' and staff\_id=X
-          * `应发工资` = 底薪 + 提成总额
-
-8.  **`GET /api/finance/dashboard?month=2025-11` (老板看板)**
-
-      * **逻辑:**
-          * `总营收` = Sum(orders.total\_amount)
-          * `总工资支出` = Sum(所有人的应发工资)
-          * `其他支出` = Sum(expenses.amount)
-          * `净利润` = 总营收 - 总工资支出 - 其他支出
-
------
+## 7. 部署与运维
+- Nginx 80 反代 uvicorn 8000，静态前端由 Nginx 提供。
+-.scripts/deploy.sh：git pull → 虚拟环境依赖 → 前端构建 → 同步静态 → 重启后端、重载 Nginx。
+- 日志：systemd（后端）、Nginx；默认 SQLite 存储（可迁移其他 DB）。
