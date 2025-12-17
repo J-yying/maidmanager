@@ -140,7 +140,16 @@
 ### 3.3 套餐
 - `GET /api/packages`：出参套餐列表
 - `POST /api/packages` / `PUT /api/packages/{id}` / `DELETE /api/packages/{id}`
-  - 入参：name, duration_minutes, price, default_commission, description
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | name | str | 套餐名称 |
+    | duration_minutes | int | 套餐时长（分钟） |
+    | price | float | 套餐金额（元） |
+    | default_commission | float | 默认提成（元，可空） |
+    | description | str | 描述（可空） |
+
   - 出参：套餐对象（删除无返回体）
 
 ### 3.4 排班
@@ -158,46 +167,106 @@
   - 入参：start, end；出参排班对象
 - `POST /api/roster/copy`
   - 入参：from_date, to_date, override（bool）；出参目标日期排班列表
+- `DELETE /api/roster/{id}`
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | id | int | 排班ID（路径参数） |
+
+  - 出参：无（204），若当日存在未取消订单则报错
 
 ### 3.5 订单/预约
 - `GET /api/orders/day_view`
-  - 入参：date（YYYY-MM-DD）
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | date | str | 日期 YYYY-MM-DD |
+
   - 出参：员工维度的排班 + 订单（包含 pending/in_progress/finished/completed）
 - `GET /api/orders/active`
-  - 入参：date（YYYY-MM-DD）
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | date | str | 日期 YYYY-MM-DD |
+
   - 出参：当日待开始/进行中/待结算/已完成订单列表
 - `GET /api/available_staff`
   - 入参：
+
     | 字段 | 类型 | 说明 |
     | --- | --- | --- |
     | target_time | str | 开始时间 YYYY-MM-DD HH:MM:ss |
     | duration | int | 时长（分钟） |
   - 出参：可用员工列表
 - `POST /api/orders`
-  - 入参：staff_id, start_datetime, end_datetime, total_amount, package_id（可空）, extra_amount（可空）, payment_method（可空）, note
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | staff_id | int | 员工ID |
+    | start_datetime | str | 开始时间 YYYY-MM-DD HH:MM:ss |
+    | end_datetime | str | 结束时间 YYYY-MM-DD HH:MM:ss |
+    | total_amount | float | 实收金额（元） |
+    | package_id | int | 套餐ID（可空） |
+    | extra_amount | float | 额外金额（可空） |
+    | payment_method | str | 支付方式（可空） |
+    | note | str | 备注（可空） |
+
   - 出参：订单对象
 - `PUT /api/orders/{id}`
   - 入参：可选字段（start/end、total_amount、extra_amount、payment_method、note、status 等）
   - 出参：订单对象
 - `GET /api/orders`
-  - 入参：from_date, to_date（可选）
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | from_date | str | 起始日期 YYYY-MM-DD（可空） |
+    | to_date | str | 结束日期 YYYY-MM-DD（可空） |
+
   - 出参：历史订单列表
 
 ### 3.6 支出
 - `GET /api/expenses`
-  - 入参：month（YYYY-MM，可选）
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | month | str | 月份 YYYY-MM（可空） |
+
   - 出参：支出列表（Expense 字段）
 - `POST /api/expenses`
-  - 入参：title, amount, expense_date, note（可空）
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | title | str | 标题 |
+    | amount | float | 金额（元） |
+    | expense_date | str | 日期 YYYY-MM-DD |
+    | note | str | 备注（可空） |
+
   - 出参：支出对象
-- `PUT /api/expenses/{id}` / `DELETE /api/expenses/{id}`
+- `PUT /api/expenses/{id}` / `DELETE /api/expenses/{id}`：同上入参（路径 id），出参支出对象/无
 
 ### 3.7 财务
 - `GET /api/finance/salary_slip`
-  - 入参：month（YYYY-MM）
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | month | str | 月份 YYYY-MM |
+
   - 出参：工资条列表（员工、底薪、提成、总计）
 - `GET /api/finance/dashboard`
-  - 入参：month（YYYY-MM）
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | month | str | 月份 YYYY-MM |
+
   - 出参：营收、提成、底薪、支出、净利润
 
 ## 4. 前后端交互与流程
