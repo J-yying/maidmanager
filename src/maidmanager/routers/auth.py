@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, status
 from .. import schemas
 from ..security import ACCOUNTS
 
-router = APIRouter(prefix="/api", tags=["auth"])
+router = APIRouter(prefix="/api", tags=["登录"])
 
 
 @router.post(

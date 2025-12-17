@@ -9,7 +9,7 @@ from .. import models, schemas
 from ..database import get_db
 from ..security import get_current_account
 
-router = APIRouter(prefix="/api", tags=["orders"])
+router = APIRouter(prefix="/api", tags=["订单"])
 
 
 def _parse_dt(raw: str) -> datetime:

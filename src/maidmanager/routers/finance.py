@@ -8,7 +8,7 @@ from .. import models, schemas
 from ..database import get_db
 from ..security import get_current_account
 
-router = APIRouter(prefix="/api/finance", tags=["finance"])
+router = APIRouter(prefix="/api/finance", tags=["财务"])
 
 
 def _validate_month(month: str) -> str:

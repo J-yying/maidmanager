@@ -7,7 +7,7 @@ from .. import models, schemas
 from ..database import get_db
 from ..security import get_current_account
 
-router = APIRouter(prefix="/api/packages", tags=["packages"])
+router = APIRouter(prefix="/api/packages", tags=["套餐"])
 
 
 @router.get(

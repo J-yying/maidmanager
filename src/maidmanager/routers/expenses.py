@@ -7,7 +7,7 @@ from .. import models, schemas
 from ..database import get_db
 from ..security import get_current_account
 
-router = APIRouter(prefix="/api/expenses", tags=["expenses"])
+router = APIRouter(prefix="/api/expenses", tags=["支出"])
 
 
 @router.post(

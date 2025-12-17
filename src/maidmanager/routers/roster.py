@@ -8,7 +8,7 @@ from .. import models, schemas
 from ..database import get_db
 from ..security import get_current_account
 
-router = APIRouter(prefix="/api/roster", tags=["roster"])
+router = APIRouter(prefix="/api/roster", tags=["排班"])
 
 
 def _normalize_time_str(raw: str) -> str:

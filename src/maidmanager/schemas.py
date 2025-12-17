@@ -8,13 +8,15 @@ class StaffBase(BaseModel):
     name: str = Field(..., description="员工姓名")
     nickname: Optional[str] = Field(None, description="昵称")
     phone: Optional[str] = Field(None, description="联系电话")
-    status: Optional[str] = Field("active", description="状态：active/resigned")
-    base_salary: Optional[float] = Field(0.0, description="底薪")
+    status: Optional[str] = Field(
+        "active", description="状态：在职(active) / 离职(resigned)"
+    )
+    base_salary: Optional[float] = Field(0.0, description="底薪（元）")
     commission_type: Optional[str] = Field(
-        "percentage", description="提成类型：percentage/fixed"
+        "percentage", description="提成类型：比例(percentage) / 固定金额(fixed)"
     )
     commission_value: Optional[float] = Field(
-        0.0, description="提成数值（比例或固定金额）"
+        0.0, description="提成数值：比例时填小数（如 0.5），固定金额时填元"
     )
 
 
@@ -28,13 +30,15 @@ class StaffUpdate(BaseModel):
     name: Optional[str] = Field(None, description="员工姓名")
     nickname: Optional[str] = Field(None, description="昵称")
     phone: Optional[str] = Field(None, description="联系电话")
-    status: Optional[str] = Field(None, description="状态：active/resigned")
-    base_salary: Optional[float] = Field(None, description="底薪")
+    status: Optional[str] = Field(
+        None, description="状态：在职(active) / 离职(resigned)"
+    )
+    base_salary: Optional[float] = Field(None, description="底薪（元）")
     commission_type: Optional[str] = Field(
-        None, description="提成类型：percentage/fixed"
+        None, description="提成类型：比例(percentage) / 固定金额(fixed)"
     )
     commission_value: Optional[float] = Field(
-        None, description="提成数值（比例或固定金额）"
+        None, description="提成数值：比例时填小数，固定金额时填元"
     )
 
 
@@ -117,7 +121,7 @@ class OrderCreate(BaseModel):
     end_datetime: str = Field(
         ..., description="结束时间，格式 YYYY-MM-DD HH:MM:ss"
     )
-    total_amount: float = Field(..., description="实收金额")
+    total_amount: float = Field(..., description="实收金额（元）")
     package_id: Optional[int] = Field(
         None, description="套餐ID（可选，仅列表中已有的套餐）"
     )
@@ -125,7 +129,7 @@ class OrderCreate(BaseModel):
         None, description="额外费用（加项、加时等）"
     )
     payment_method: Optional[str] = Field(
-        None, description="支付方式：wechat/alipay/cash"
+        None, description="支付方式：微信(wechat)/支付宝(alipay)/现金(cash)"
     )
     note: Optional[str] = Field(None, description="备注")
 
@@ -156,7 +160,7 @@ class OrderUpdate(BaseModel):
         None, description="额外费用（加项、加时等）"
     )
     payment_method: Optional[str] = Field(
-        None, description="支付方式：wechat/alipay/cash"
+        None, description="支付方式：微信(wechat)/支付宝(alipay)/现金(cash)"
     )
     note: Optional[str] = Field(None, description="备注")
     status: Optional[str] = Field(None, description="订单状态：completed/cancelled")
@@ -199,7 +203,7 @@ class AvailableStaffQuery(BaseModel):
     target_time: str = Field(
         ..., description="目标开始时间 YYYY-MM-DD HH:MM:ss"
     )
-    duration: int = Field(..., description="时长（分钟）")
+    duration: int = Field(..., description="预约时长（分钟）")
 
     @validator("target_time")
     def validate_target_time(cls, v: str) -> str:
@@ -248,8 +252,8 @@ class ExpenseBase(BaseModel):
     title: str = Field(..., description="支出项名称")
     amount: float = Field(..., description="支出金额")
     expense_date: str = Field(..., description="支出日期 YYYY-MM-DD")
-    category: Optional[str] = Field(None, description="类别，如 rent/utilities")
-    note: Optional[str] = Field(None, description="备注")
+    category: Optional[str] = Field(None, description="类别（选填）")
+    note: Optional[str] = Field(None, description="备注（选填）")
 
     @validator("expense_date")
     def validate_expense_date(cls, v: str) -> str:
@@ -292,7 +296,7 @@ class ExpenseRead(ExpenseBase):
 class ServicePackageBase(BaseModel):
     name: str = Field(..., description="套餐名称")
     duration_minutes: int = Field(..., description="套餐时长（分钟）")
-    price: float = Field(..., description="套餐金额")
+    price: float = Field(..., description="套餐金额（元）")
     description: Optional[str] = Field(None, description="描述")
     default_commission: Optional[float] = Field(
         0.0, description="默认提成金额（员工配置时的参考）"
