@@ -50,7 +50,7 @@ def create_staff(
 @router.get("", response_model=List[schemas.StaffRead])
 def list_staff(
     status_filter: Optional[str] = Query(
-        None, alias="status", description="按状态过滤：active/resigned"
+        None, alias="status", description="按状态过滤：在职/离职"
     ),
     db: Session = Depends(get_db),
     current_account: dict = Depends(get_current_account),

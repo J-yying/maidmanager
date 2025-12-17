@@ -8,12 +8,10 @@ class StaffBase(BaseModel):
     name: str = Field(..., description="员工姓名")
     nickname: Optional[str] = Field(None, description="昵称")
     phone: Optional[str] = Field(None, description="联系电话")
-    status: Optional[str] = Field(
-        "active", description="状态：在职(active) / 离职(resigned)"
-    )
+    status: Optional[str] = Field("active", description="状态：在职 / 离职")
     base_salary: Optional[float] = Field(0.0, description="底薪（元）")
     commission_type: Optional[str] = Field(
-        "percentage", description="提成类型：比例(percentage) / 固定金额(fixed)"
+        "percentage", description="提成类型：比例 / 固定金额"
     )
     commission_value: Optional[float] = Field(
         0.0, description="提成数值：比例时填小数（如 0.5），固定金额时填元"
@@ -30,12 +28,10 @@ class StaffUpdate(BaseModel):
     name: Optional[str] = Field(None, description="员工姓名")
     nickname: Optional[str] = Field(None, description="昵称")
     phone: Optional[str] = Field(None, description="联系电话")
-    status: Optional[str] = Field(
-        None, description="状态：在职(active) / 离职(resigned)"
-    )
+    status: Optional[str] = Field(None, description="状态：在职 / 离职")
     base_salary: Optional[float] = Field(None, description="底薪（元）")
     commission_type: Optional[str] = Field(
-        None, description="提成类型：比例(percentage) / 固定金额(fixed)"
+        None, description="提成类型：比例 / 固定金额"
     )
     commission_value: Optional[float] = Field(
         None, description="提成数值：比例时填小数，固定金额时填元"
@@ -129,7 +125,7 @@ class OrderCreate(BaseModel):
         None, description="额外费用（加项、加时等）"
     )
     payment_method: Optional[str] = Field(
-        None, description="支付方式：微信(wechat)/支付宝(alipay)/现金(cash)"
+        None, description="支付方式：微信 / 支付宝 / 现金"
     )
     note: Optional[str] = Field(None, description="备注")
 
@@ -160,10 +156,10 @@ class OrderUpdate(BaseModel):
         None, description="额外费用（加项、加时等）"
     )
     payment_method: Optional[str] = Field(
-        None, description="支付方式：微信(wechat)/支付宝(alipay)/现金(cash)"
+        None, description="支付方式：微信 / 支付宝 / 现金"
     )
     note: Optional[str] = Field(None, description="备注")
-    status: Optional[str] = Field(None, description="订单状态：completed/cancelled")
+    status: Optional[str] = Field(None, description="订单状态：已完成 / 已取消")
 
     @validator("start_datetime", "end_datetime")
     def validate_dt_optional(cls, v: Optional[str]) -> Optional[str]:
