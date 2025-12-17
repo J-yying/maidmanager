@@ -105,20 +105,35 @@
 
 ### 3.2 员工
 - `GET /api/staff`
-  - 入参：| 字段 | 类型 | 说明 |
-          | --- | --- | --- |
-          | status | str | 在职/离职（可选） |
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | status | str | 在职/离职（可选） |
+
   - 出参：员工列表（同 Staff 字段）
 - `POST /api/staff` / `PUT /api/staff/{id}`
-  - 入参：name, phone, status, commission_type, commission_value（比例用小数）
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | name | str | 姓名 |
+    | phone | str | 电话（可空） |
+    | status | str | 在职/离职 |
+    | commission_type | str | 提成类型：比例/固定金额 |
+    | commission_value | float | 提成数值：比例用小数，固定用元 |
+
   - 出参：员工对象
 - `GET /api/staff/{id}/package_commissions`
-  - 出参：| 字段 | 类型 | 说明 |
-          | --- | --- | --- |
-          | package_id | int | 套餐ID |
-          | package_name | str | 套餐名称 |
-          | default_commission | float | 套餐默认提成 |
-          | staff_commission | float | 员工定制提成（可空） |
+  - 出参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | package_id | int | 套餐ID |
+    | package_name | str | 套餐名称 |
+    | default_commission | float | 套餐默认提成 |
+    | staff_commission | float | 员工定制提成（可空） |
+
 - `PUT /api/staff/{id}/package_commissions`
   - 入参：列表，每项 {package_id, commission_amount}；无返回体
 
@@ -130,9 +145,12 @@
 
 ### 3.4 排班
 - `GET /api/roster`
-  - 入参：| 字段 | 类型 | 说明 |
-          | --- | --- | --- |
-          | date | str | YYYY-MM-DD |
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | date | str | YYYY-MM-DD |
+
   - 出参：排班列表（WorkShift 字段）
 - `POST /api/roster`
   - 入参：staff_id, date, start, end；出参排班对象
@@ -210,5 +228,5 @@
 
 ## 7. 部署与运维
 - Nginx 80 反代 uvicorn 8000，静态前端由 Nginx 提供。
--.scripts/deploy.sh：git pull → 虚拟环境依赖 → 前端构建 → 同步静态 → 重启后端、重载 Nginx。
+- `scripts/deploy.sh`：git pull → 虚拟环境依赖 → 前端构建 → 同步静态 → 重启后端、重载 Nginx。
 - 日志：systemd（后端）、Nginx；默认 SQLite 存储（可迁移其他 DB）。
