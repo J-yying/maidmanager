@@ -48,7 +48,11 @@ def create_staff(
     return db_staff
 
 
-@router.get("", response_model=List[schemas.StaffRead])
+@router.get(
+    "",
+    response_model=List[schemas.StaffRead],
+    summary="员工列表",
+)
 def list_staff(
     status_filter: Optional[str] = Query(
         None, alias="status", description="按状态过滤：在职/离职"
