@@ -160,13 +160,46 @@
     | --- | --- | --- |
     | date | str | YYYY-MM-DD |
 
-  - 出参：排班列表（WorkShift 字段）
+  - 出参：排班列表（字段同下）
 - `POST /api/roster`
-  - 入参：staff_id, date, start, end；出参排班对象
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | staff_id | int | 员工ID |
+    | date | str | 日期 YYYY-MM-DD |
+    | start | str | 开始时间 HH:MM 或 HH:MM:ss |
+    | end | str | 结束时间 HH:MM 或 HH:MM:ss |
+
+  - 出参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | id | int | 排班ID |
+    | staff_id | int | 员工ID |
+    | work_date | str | 日期 |
+    | start_time | str | 开始时间 |
+    | end_time | str | 结束时间 |
+    | owner | str | 数据归属 |
 - `PUT /api/roster/{id}`
-  - 入参：start, end；出参排班对象
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | start | str | 开始时间 |
+    | end | str | 结束时间 |
+
+  - 出参：同上排班字段
 - `POST /api/roster/copy`
-  - 入参：from_date, to_date, override（bool）；出参目标日期排班列表
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | from_date | str | 源日期 YYYY-MM-DD |
+    | to_date | str | 目标日期 YYYY-MM-DD |
+    | override | bool | 是否覆盖目标日已有排班 |
+
+  - 出参：目标日期排班列表（同排班字段）
 - `DELETE /api/roster/{id}`
   - 入参：
 
@@ -185,6 +218,14 @@
     | date | str | 日期 YYYY-MM-DD |
 
   - 出参：员工维度的排班 + 订单（包含 pending/in_progress/finished/completed）
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | staff_id | int | 员工ID |
+    | staff_name | str | 员工姓名 |
+    | shifts | list | 排班列表（id, work_date, start_time, end_time） |
+    | pending_orders | list | 待开始订单 |
+    | orders | list | 进行中/待结算/已完成订单 |
 - `GET /api/orders/active`
   - 入参：
 
@@ -193,6 +234,19 @@
     | date | str | 日期 YYYY-MM-DD |
 
   - 出参：当日待开始/进行中/待结算/已完成订单列表
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | id | int | 订单ID |
+    | staff_id | int | 员工ID |
+    | staff_name | str | 员工姓名 |
+    | customer_name | str | 客户名（可空） |
+    | start_datetime | str | 开始时间 |
+    | end_datetime | str | 结束时间 |
+    | package_name | str | 套餐名 |
+    | status | str | 状态 |
+    | total_amount | float | 实收金额 |
+    | note | str | 备注（可空） |
 - `GET /api/available_staff`
   - 入参：
 
@@ -201,6 +255,14 @@
     | target_time | str | 开始时间 YYYY-MM-DD HH:MM:ss |
     | duration | int | 时长（分钟） |
   - 出参：可用员工列表
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | id | int | 员工ID |
+    | name | str | 姓名 |
+    | status | str | 在职/离职 |
+    | commission_type | str | 提成类型 |
+    | commission_value | float | 提成数值 |
 - `POST /api/orders`
   - 入参：
 
@@ -215,10 +277,27 @@
     | payment_method | str | 支付方式（可空） |
     | note | str | 备注（可空） |
 
-  - 出参：订单对象
+  - 出参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | id | int | 订单ID |
+    | staff_id | int | 员工ID |
+    | staff_name | str | 员工姓名 |
+    | start_datetime | str | 开始时间 |
+    | end_datetime | str | 结束时间 |
+    | total_amount | float | 实收金额 |
+    | package_id | int | 套餐ID（可空） |
+    | package_name | str | 套餐名称 |
+    | extra_amount | float | 额外金额 |
+    | payment_method | str | 支付方式 |
+    | commission_amount | float | 提成金额 |
+    | status | str | 状态 |
+    | note | str | 备注 |
+    | created_at | str | 创建时间 |
 - `PUT /api/orders/{id}`
   - 入参：可选字段（start/end、total_amount、extra_amount、payment_method、note、status 等）
-  - 出参：订单对象
+  - 出参：订单对象（同上字段）
 - `GET /api/orders`
   - 入参：
 
@@ -227,7 +306,7 @@
     | from_date | str | 起始日期 YYYY-MM-DD（可空） |
     | to_date | str | 结束日期 YYYY-MM-DD（可空） |
 
-  - 出参：历史订单列表
+  - 出参：历史订单列表（同订单字段）
 
 ### 3.6 支出
 - `GET /api/expenses`
@@ -248,7 +327,16 @@
     | expense_date | str | 日期 YYYY-MM-DD |
     | note | str | 备注（可空） |
 
-  - 出参：支出对象
+  - 出参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | id | int | 支出ID |
+    | title | str | 标题 |
+    | amount | float | 金额（元） |
+    | expense_date | str | 日期 |
+    | note | str | 备注 |
+    | owner | str | 数据归属 |
 - `PUT /api/expenses/{id}` / `DELETE /api/expenses/{id}`：同上入参（路径 id），出参支出对象/无
 
 ### 3.7 财务
@@ -259,7 +347,17 @@
     | --- | --- | --- |
     | month | str | 月份 YYYY-MM |
 
-  - 出参：工资条列表（员工、底薪、提成、总计）
+  - 出参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | month | str | 月份 |
+    | items | list | 工资条列表 |
+    | items[].staff_id | int | 员工ID |
+    | items[].staff_name | str | 员工姓名 |
+    | items[].base_salary | float | 底薪 |
+    | items[].commission_total | float | 提成总额 |
+    | items[].total_salary | float | 应发合计 |
 - `GET /api/finance/dashboard`
   - 入参：
 
@@ -267,7 +365,17 @@
     | --- | --- | --- |
     | month | str | 月份 YYYY-MM |
 
-  - 出参：营收、提成、底薪、支出、净利润
+  - 出参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | month | str | 月份 |
+    | total_revenue | float | 总营收 |
+    | total_commission | float | 总提成 |
+    | total_base_salary | float | 总底薪 |
+    | total_salary | float | 总薪资 |
+    | total_expenses | float | 总支出 |
+    | net_profit | float | 净利润 |
 
 ## 4. 前后端交互与流程
 - 登录后前端保存 token，axios header 自动带 Authorization。
