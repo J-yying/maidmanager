@@ -27,7 +27,11 @@ def _parse_time(raw: str) -> time:
     return datetime.strptime(normalized, "%H:%M:%S").time()
 
 
-@router.get("", response_model=List[schemas.WorkShiftRead])
+@router.get(
+    "",
+    response_model=List[schemas.WorkShiftRead],
+    summary="获取指定日期排班",
+)
 def get_roster_by_date(
     date: str = Query(..., description="日期 YYYY-MM-DD"),
     db: Session = Depends(get_db),
@@ -58,6 +62,7 @@ def get_roster_by_date(
     "",
     response_model=schemas.WorkShiftRead,
     status_code=status.HTTP_201_CREATED,
+    summary="新增排班",
 )
 def create_work_shift(
     shift_in: schemas.WorkShiftCreate,
@@ -135,7 +140,7 @@ def create_work_shift(
 @router.post(
     "/copy",
     response_model=List[schemas.WorkShiftRead],
-    summary="复制某日排班到另一日",
+    summary="复制排班到指定日期",
 )
 def copy_work_shifts(
     payload: schemas.RosterCopyRequest,
@@ -196,7 +201,7 @@ def copy_work_shifts(
 @router.put(
     "/{shift_id}",
     response_model=schemas.WorkShiftRead,
-    summary="编辑排班（可改员工/日期，不可改时间）",
+    summary="编辑排班（修改开始/结束时间）",
 )
 def update_work_shift(
     shift_id: int,

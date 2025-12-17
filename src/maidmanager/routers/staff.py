@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/staff", tags=["员工"])
     "",
     response_model=schemas.StaffRead,
     status_code=status.HTTP_201_CREATED,
+    summary="新增员工",
 )
 def create_staff(
     staff_in: schemas.StaffCreate,
