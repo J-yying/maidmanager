@@ -1,14 +1,9 @@
 from fastapi import APIRouter, HTTPException, status
 
 from .. import schemas
+from ..security import ACCOUNTS
 
 router = APIRouter(prefix="/api", tags=["auth"])
-
-
-ACCOUNTS = {
-    "manager": {"password": "manager123", "role": "manager"},
-    "investor": {"password": "investor123", "role": "investor"},
-}
 
 
 @router.post(
@@ -33,4 +28,3 @@ def login(payload: schemas.LoginRequest) -> schemas.LoginResponse:
         role=account["role"],
         token=token,
     )
-

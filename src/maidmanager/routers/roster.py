@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
+from ..security import get_current_account
 
 router = APIRouter(prefix="/api/roster", tags=["roster"])
 
@@ -30,6 +31,7 @@ def _parse_time(raw: str) -> time:
 def get_roster_by_date(
     date: str = Query(..., description="日期 YYYY-MM-DD"),
     db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> List[schemas.WorkShiftRead]:
     """获取某日排班列表。"""
     try:
@@ -42,7 +44,10 @@ def get_roster_by_date(
 
     shifts = (
         db.query(models.WorkShift)
-        .filter(models.WorkShift.work_date == date)
+        .filter(
+            models.WorkShift.work_date == date,
+            models.WorkShift.owner == current_account["username"],
+        )
         .order_by(models.WorkShift.start_time)
         .all()
     )
@@ -55,7 +60,9 @@ def get_roster_by_date(
     status_code=status.HTTP_201_CREATED,
 )
 def create_work_shift(
-    shift_in: schemas.WorkShiftCreate, db: Session = Depends(get_db)
+    shift_in: schemas.WorkShiftCreate,
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> schemas.WorkShiftRead:
     """新增排班。
 
@@ -63,7 +70,14 @@ def create_work_shift(
     不做复杂排班冲突检测，后续可以基于 F2.2 规则扩展。
     """
     # 校验员工存在
-    staff = db.query(models.Staff).filter(models.Staff.id == shift_in.staff_id).first()
+    staff = (
+        db.query(models.Staff)
+        .filter(
+            models.Staff.id == shift_in.staff_id,
+            models.Staff.owner == current_account["username"],
+        )
+        .first()
+    )
     if not staff:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -89,21 +103,20 @@ def create_work_shift(
     start_str = start_time_obj.strftime("%H:%M:%S")
     end_str = end_time_obj.strftime("%H:%M:%S")
 
-    # 简单去重：避免完全相同的排班重复插入
-    exists = (
+    # 限制：同一员工同一天仅允许 1 条排班
+    exists_same_day = (
         db.query(models.WorkShift)
         .filter(
             models.WorkShift.staff_id == shift_in.staff_id,
             models.WorkShift.work_date == shift_in.date,
-            models.WorkShift.start_time == start_str,
-            models.WorkShift.end_time == end_str,
+            models.WorkShift.owner == current_account["username"],
         )
         .first()
     )
-    if exists:
+    if exists_same_day:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="相同时间段排班已存在",
+            detail="该员工当天已存在排班，不能重复添加",
         )
 
     db_shift = models.WorkShift(
@@ -111,6 +124,7 @@ def create_work_shift(
         work_date=shift_in.date,
         start_time=start_str,
         end_time=end_str,
+        owner=current_account["username"],
     )
     db.add(db_shift)
     db.commit()
@@ -124,7 +138,9 @@ def create_work_shift(
     summary="复制某日排班到另一日",
 )
 def copy_work_shifts(
-    payload: schemas.RosterCopyRequest, db: Session = Depends(get_db)
+    payload: schemas.RosterCopyRequest,
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> List[schemas.WorkShiftRead]:
     """复制指定日期的排班到目标日期。
 
@@ -132,7 +148,10 @@ def copy_work_shifts(
     """
     source_shifts = (
         db.query(models.WorkShift)
-        .filter(models.WorkShift.work_date == payload.from_date)
+        .filter(
+            models.WorkShift.work_date == payload.from_date,
+            models.WorkShift.owner == current_account["username"],
+        )
         .all()
     )
     if not source_shifts:
@@ -143,7 +162,8 @@ def copy_work_shifts(
 
     # 若目标日期已有排班且未允许覆盖，则提示前端确认
     target_q = db.query(models.WorkShift).filter(
-        models.WorkShift.work_date == payload.to_date
+        models.WorkShift.work_date == payload.to_date,
+        models.WorkShift.owner == current_account["username"],
     )
     target_count = target_q.count()
     if target_count > 0 and not payload.override:
@@ -162,6 +182,7 @@ def copy_work_shifts(
             work_date=payload.to_date,
             start_time=shift.start_time,
             end_time=shift.end_time,
+            owner=current_account["username"],
         )
         db.add(cloned)
         new_shifts.append(cloned)
@@ -170,3 +191,54 @@ def copy_work_shifts(
     for s in new_shifts:
         db.refresh(s)
     return new_shifts
+
+
+@router.put(
+    "/{shift_id}",
+    response_model=schemas.WorkShiftRead,
+    summary="编辑排班（可改员工/日期，不可改时间）",
+)
+def update_work_shift(
+    shift_id: int,
+    payload: schemas.WorkShiftUpdate,
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
+) -> schemas.WorkShiftRead:
+    """编辑排班：仅允许修改开始/结束时间，不可改员工与日期。"""
+    db_shift = (
+        db.query(models.WorkShift)
+        .filter(
+            models.WorkShift.id == shift_id,
+            models.WorkShift.owner == current_account["username"],
+        )
+        .first()
+    )
+    if not db_shift:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="排班不存在"
+        )
+
+    # 如未提供则沿用原值
+    new_start = payload.start or db_shift.start_time
+    new_end = payload.end or db_shift.end_time
+
+    try:
+        start_time_obj = _parse_time(new_start)
+        end_time_obj = _parse_time(new_end)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    if start_time_obj >= end_time_obj:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="开始时间必须早于结束时间",
+        )
+
+    # 员工与日期保持不变，仅更新时间
+    db_shift.start_time = start_time_obj.strftime("%H:%M:%S")
+    db_shift.end_time = end_time_obj.strftime("%H:%M:%S")
+    db.commit()
+    db.refresh(db_shift)
+    return db_shift

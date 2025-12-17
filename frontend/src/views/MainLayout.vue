@@ -30,7 +30,7 @@
     </el-aside>
     <el-container>
       <el-header class="header">
-        <div class="header-left">女仆店内部管理系统</div>
+        <div class="header-left">店铺内部管理系统</div>
         <div class="header-right">
           <span v-if="user">
             当前用户：{{ user.username }}（{{ user.role === "investor" ? "投资人" : "店长" }}）

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
+from ..security import get_current_account
 
 router = APIRouter(prefix="/api/expenses", tags=["expenses"])
 
@@ -16,7 +17,9 @@ router = APIRouter(prefix="/api/expenses", tags=["expenses"])
     summary="新增支出记录",
 )
 def create_expense(
-    expense_in: schemas.ExpenseCreate, db: Session = Depends(get_db)
+    expense_in: schemas.ExpenseCreate,
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> schemas.ExpenseRead:
     """新增一条支出记录（如房租、水电等）。"""
     if expense_in.amount <= 0:
@@ -30,6 +33,7 @@ def create_expense(
         expense_date=expense_in.expense_date,
         category=expense_in.category,
         note=expense_in.note,
+        owner=current_account["username"],
     )
     db.add(db_expense)
     db.commit()
@@ -47,9 +51,12 @@ def list_expenses(
         None, description="按月份过滤，格式 YYYY-MM（可选）"
     ),
     db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> List[schemas.ExpenseRead]:
     """查询支出列表，可按月份过滤。"""
-    query = db.query(models.Expense)
+    query = db.query(models.Expense).filter(
+        models.Expense.owner == current_account["username"]
+    )
     if month:
         if len(month) != 7 or "-" not in month:
             raise HTTPException(
@@ -73,10 +80,16 @@ def update_expense(
     expense_id: int,
     expense_in: schemas.ExpenseUpdate,
     db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> schemas.ExpenseRead:
     """修改一条支出记录。"""
     db_expense = (
-        db.query(models.Expense).filter(models.Expense.id == expense_id).first()
+        db.query(models.Expense)
+        .filter(
+            models.Expense.id == expense_id,
+            models.Expense.owner == current_account["username"],
+        )
+        .first()
     )
     if not db_expense:
         raise HTTPException(
@@ -98,3 +111,28 @@ def update_expense(
     db.refresh(db_expense)
     return db_expense
 
+
+@router.delete(
+    "/{expense_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="删除支出记录",
+)
+def delete_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
+) -> None:
+    db_expense = (
+        db.query(models.Expense)
+        .filter(
+            models.Expense.id == expense_id,
+            models.Expense.owner == current_account["username"],
+        )
+        .first()
+    )
+    if not db_expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="支出记录不存在"
+        )
+    db.delete(db_expense)
+    db.commit()

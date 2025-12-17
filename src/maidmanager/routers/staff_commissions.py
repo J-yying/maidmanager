@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
+from ..security import get_current_account
 
 router = APIRouter(prefix="/api/staff", tags=["staff"])
 
@@ -15,21 +16,38 @@ router = APIRouter(prefix="/api/staff", tags=["staff"])
     summary="查询员工的套餐提成配置",
 )
 def list_staff_package_commissions(
-    staff_id: int, db: Session = Depends(get_db)
+    staff_id: int,
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> List[schemas.StaffPackageCommissionItem]:
-    staff = db.query(models.Staff).filter(models.Staff.id == staff_id).first()
+    staff = (
+        db.query(models.Staff)
+        .filter(
+            models.Staff.id == staff_id,
+            models.Staff.owner == current_account["username"],
+        )
+        .first()
+    )
     if not staff:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="员工不存在"
         )
 
     # 所有套餐
-    packages = db.query(models.ServicePackage).order_by(models.ServicePackage.id).all()
+    packages = (
+        db.query(models.ServicePackage)
+        .filter(models.ServicePackage.owner == current_account["username"])
+        .order_by(models.ServicePackage.id)
+        .all()
+    )
 
     # 该员工的配置
     rows = (
         db.query(models.StaffPackageCommission)
-        .filter(models.StaffPackageCommission.staff_id == staff_id)
+        .filter(
+            models.StaffPackageCommission.staff_id == staff_id,
+            models.StaffPackageCommission.owner == current_account["username"],
+        )
         .all()
     )
     by_package = {row.package_id: row for row in rows}
@@ -57,8 +75,16 @@ def update_staff_package_commissions(
     staff_id: int,
     items: List[schemas.StaffPackageCommissionUpdateItem],
     db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> None:
-    staff = db.query(models.Staff).filter(models.Staff.id == staff_id).first()
+    staff = (
+        db.query(models.Staff)
+        .filter(
+            models.Staff.id == staff_id,
+            models.Staff.owner == current_account["username"],
+        )
+        .first()
+    )
     if not staff:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="员工不存在"
@@ -78,6 +104,8 @@ def update_staff_package_commissions(
             .filter(
                 models.StaffPackageCommission.staff_id == staff_id,
                 models.StaffPackageCommission.package_id == item.package_id,
+                models.StaffPackageCommission.owner
+                == current_account["username"],
             )
             .first()
         )
@@ -88,8 +116,8 @@ def update_staff_package_commissions(
                 staff_id=staff_id,
                 package_id=item.package_id,
                 commission_amount=item.commission_amount,
+                owner=current_account["username"],
             )
             db.add(row)
 
     db.commit()
-

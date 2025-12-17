@@ -1,46 +1,59 @@
-<<<<<<< HEAD
 # MaidManager
 
-店铺管理系统，可应用于多数上钟型的店铺进行人员、排班、成本管理。FastAPI 后端与 Vite 前端的女仆店内部管理系统（MVP）。
+店铺管理系统，可应用于多数上钟型的店铺进行人员、排班、成本管理。后端基于 FastAPI + SQLite，前端基于 Vue3 + Vite。
 
-## 环境要求
-- Python 3.10+
-- Node.js 18+ 与 npm
+## 功能模块
+- 账号隔离：内置示例账号 `manager` / `manager1`（密码均 `manager123`）、`investor`（`investor123`）。各账号数据互相隔离。
+- 员工管理：新增/编辑员工，比例提成（UI 以百分比录入/展示）、固定金额提成，套餐提成配置。
+- 套餐管理：定义时长与价格，提供续钟时长/金额基线。
+- 排班管理：同账号同员工同日仅允许一条排班，支持编辑（改开始/结束时间），排班/订单时间轴动态缩放。
+- 工作管理（订单）：
+  - 预约创建：选择时间/套餐/员工，避免与现有预约或进行中订单时间重叠。
+  - 状态流转：待开始 → 进行中 → 待结算 → 已完成；当天完成订单可查看。
+  - 实际时间：开始/结束/结算弹窗均可录入实际开始/结束时间；结束时间不晚于开始时自动释放占用。
+  - 续钟：进行中订单可选套餐续钟，自动延长结束时间、累加金额/备注，若与后续预约冲突将提示失败。
+- 财务/支出：工资条、财务概览；支出新增/编辑/删除，列表独立于录入表单。
 
-## 后端（API）
-1) 安装依赖
+## 快速上手
+### 后端（开发）
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-2) 运行本地开发服务（默认会创建/使用本地 SQLite 数据库 `maid_system.db`）
-```bash
 PYTHONPATH=src uvicorn maidmanager.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-3) 访问 API 文档：`http://localhost:8000/docs`
+接口文档：`http://localhost:8000/docs`
 
-## 前端（Web）
+### 前端（开发）
 ```bash
 cd frontend
 npm install
-npm run dev   # 本地开发
-npm run build # 生成生产环境静态文件
+npm run dev
 ```
-构建产物位于 `frontend/dist`，可由 Nginx 等静态服务托管；本部署中 `/api` 反代到后端 `http://127.0.0.1:8000`。
+Vite 默认端口 5173，可按提示访问。
 
-## 部署提示
-- 生产环境建议使用 `systemd` 或进程管理器（如 uvicorn + Nginx 反代）。
-- 将 SSH 访问与应用服务端口分开，并使用防火墙/安全组限制。
+### 账号与鉴权
+- 登录接口返回 `Bearer fake-token-<username>`，前端会自动带上 Authorization。
+- 每个账号的资源均带有 `owner` 字段，后端按 owner 过滤，防止跨账号访问。
 
-## 服务器一键部署脚本
-在服务器（/root/np）已配置 SSH Key 且 Nginx/systemd 现有配置不变的情况下，可直接运行：
+## 使用说明（示例流程）
+1) 登录：使用示例账号登录，进入主界面。
+2) 配置基础数据：
+   - 员工管理：新增员工，设置提成类型；比例提成按百分比输入（如 50 表示 50%）。
+   - 套餐管理：配置时长/价格，作为下单与续钟的基线。
+3) 排班：为员工创建每日排班。同员工同日仅允许一条排班；可编辑开始/结束时间。时间轴会随排班自动缩放。
+4) 预约与服务：
+   - 在“工作管理”预约创建时间、套餐，查询可用员工（系统阻止与现有预约/进行中订单重叠）。
+   - 待开始 → “开始”弹窗录入实际开始/预计结束；进行中可“续钟”（自动延时、累加金额/备注）。
+   - “结束服务”录入实际结束；若结束不晚于开始则自动取消释放时间。
+   - “结算”可调整实际开始/结束与金额/支付方式，状态置为已完成；当日已完成可查看。
+5) 支出：左侧录入支出，右侧列表查看/编辑/删除（删除需确认）。可按月份筛选。
+6) 财务：查看工资条与财务概览。
+
+## 部署
+服务器（已配置 SSH Key，Nginx/systemd 已按当前方案）：
 ```bash
 cd /root/np
 ./scripts/deploy.sh
 ```
-脚本会执行：`git pull --ff-only origin main` → 创建/使用 `.venv` 并安装依赖 → 构建前端 (`npm ci && npm run build`) → 同步静态到 `/var/www/maidmanager-frontend` → `systemctl restart maidmanager` 与 `systemctl reload nginx`。运行前请确保工作区干净（脚本会检测）。
-=======
-# maidmanager
-店铺管理系统，可应用于多数上钟型的店铺进行人员，排班，成本管理
->>>>>>> origin/main
+脚本执行：`git pull --ff-only origin main` → 创建/使用 `.venv` 安装依赖 → 构建前端 (`npm ci && npm run build`) → 同步静态到 `/var/www/maidmanager-frontend` → 重启后端、重载 Nginx。运行前确保工作区干净。

@@ -76,7 +76,9 @@
           </el-select>
         </el-form-item>
         <el-form-item v-if="form.commission_type === 'percentage'" label="提成比例">
-          <el-input v-model.number="form.commission_value" type="number" placeholder="如 0.4 表示 40%" />
+          <el-input v-model.number="form.commission_value" type="number" placeholder="如 50 表示 50%" :step="1" :min="0">
+            <template #append>%</template>
+          </el-input>
         </el-form-item>
         <el-form-item v-else label="提成说明">
           <span class="hint">固定金额模式下，请在“套餐提成”中为每个套餐配置提成金额。</span>
@@ -142,7 +144,7 @@ const form = reactive({
   status: "active",
   base_salary: 0,
   commission_type: "percentage",
-  commission_value: 0
+  commission_value: 0 // UI 层使用百分比数值，如 50 表示 50%
 });
 
 const fetchStaff = async () => {
@@ -182,7 +184,11 @@ const openEdit = (row) => {
   form.status = row.status || "active";
   form.base_salary = row.base_salary ?? 0;
   form.commission_type = row.commission_type || "percentage";
-  form.commission_value = row.commission_value ?? 0;
+  if (form.commission_type === "percentage") {
+    form.commission_value = ((row.commission_value ?? 0) * 100).toFixed(0) * 1;
+  } else {
+    form.commission_value = row.commission_value ?? 0;
+  }
   dialogVisible.value = true;
 };
 
@@ -233,11 +239,23 @@ const submitForm = async () => {
   }
   submitting.value = true;
   try {
+    const payload = {
+      name: form.name,
+      phone: form.phone,
+      status: form.status,
+      base_salary: form.base_salary,
+      commission_type: form.commission_type,
+      commission_value:
+        form.commission_type === "percentage"
+          ? (form.commission_value || 0) / 100
+          : form.commission_value || 0
+    };
+
     if (isEdit.value && editingId.value != null) {
-      await api.put(`/staff/${editingId.value}`, form);
+      await api.put(`/staff/${editingId.value}`, payload);
       ElMessage.success("更新成功");
     } else {
-      await api.post("/staff", form);
+      await api.post("/staff", payload);
       ElMessage.success("新增成功");
     }
     dialogVisible.value = false;

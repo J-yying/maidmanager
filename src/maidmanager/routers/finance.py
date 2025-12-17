@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
+from ..security import get_current_account
 
 router = APIRouter(prefix="/api/finance", tags=["finance"])
 
@@ -33,6 +34,7 @@ def _validate_month(month: str) -> str:
 def get_salary_slip(
     month: str = Query(..., description="月份 YYYY-MM"),
     db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> schemas.SalarySlipResponse:
     """按月生成所有员工的工资条汇总。"""
     month = _validate_month(month)
@@ -40,7 +42,10 @@ def get_salary_slip(
 
     staff_list: List[models.Staff] = (
         db.query(models.Staff)
-        .filter(models.Staff.status == "active")
+        .filter(
+            models.Staff.status == "active",
+            models.Staff.owner == current_account["username"],
+        )
         .order_by(models.Staff.id)
         .all()
     )
@@ -53,6 +58,7 @@ def get_salary_slip(
                 models.Order.staff_id == staff.id,
                 models.Order.status == "completed",
                 models.Order.order_date.like(like_pattern),
+                models.Order.owner == current_account["username"],
             )
             .scalar()
         )
@@ -79,6 +85,7 @@ def get_salary_slip(
 def get_finance_dashboard(
     month: str = Query(..., description="月份 YYYY-MM"),
     db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> schemas.FinanceDashboardResponse:
     """财务驾驶舱：营收、工资、支出与净利润。"""
     month = _validate_month(month)
@@ -90,6 +97,7 @@ def get_finance_dashboard(
         .filter(
             models.Order.status == "completed",
             models.Order.order_date.like(like_pattern),
+            models.Order.owner == current_account["username"],
         )
         .scalar()
     )
@@ -100,12 +108,15 @@ def get_finance_dashboard(
         .filter(
             models.Order.status == "completed",
             models.Order.order_date.like(like_pattern),
+            models.Order.owner == current_account["username"],
         )
         .scalar()
     )
 
     # 工资条（用于计算总底薪与应发工资）
-    salary_slip = get_salary_slip(month=month, db=db)
+    salary_slip = get_salary_slip(
+        month=month, db=db, current_account=current_account
+    )
     total_base_salary = float(
         sum(item.base_salary for item in salary_slip.items)
     )
@@ -114,7 +125,10 @@ def get_finance_dashboard(
     # 其他支出
     total_expenses = (
         db.query(func.coalesce(func.sum(models.Expense.amount), 0.0))
-        .filter(models.Expense.expense_date.like(like_pattern))
+        .filter(
+            models.Expense.expense_date.like(like_pattern),
+            models.Expense.owner == current_account["username"],
+        )
         .scalar()
     )
 
@@ -131,4 +145,3 @@ def get_finance_dashboard(
         total_expenses=float(total_expenses or 0.0),
         net_profit=net_profit,
     )
-

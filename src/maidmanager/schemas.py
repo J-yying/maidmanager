@@ -85,6 +85,13 @@ class WorkShiftRead(BaseModel):
         orm_mode = True
 
 
+class WorkShiftUpdate(BaseModel):
+    """编辑排班：允许修改开始/结束时间，不支持改员工与日期。"""
+
+    start: Optional[str] = Field(None, description="开始时间 HH:MM 或 HH:MM:ss")
+    end: Optional[str] = Field(None, description="结束时间 HH:MM 或 HH:MM:ss")
+
+
 class RosterCopyRequest(BaseModel):
     from_date: str = Field(..., description="源日期 YYYY-MM-DD")
     to_date: str = Field(..., description="目标日期 YYYY-MM-DD")

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
+from ..security import get_current_account
 
 router = APIRouter(prefix="/api/staff", tags=["staff"])
 
@@ -15,7 +16,9 @@ router = APIRouter(prefix="/api/staff", tags=["staff"])
     status_code=status.HTTP_201_CREATED,
 )
 def create_staff(
-    staff_in: schemas.StaffCreate, db: Session = Depends(get_db)
+    staff_in: schemas.StaffCreate,
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> schemas.StaffRead:
     """新增员工。
 
@@ -36,6 +39,7 @@ def create_staff(
         base_salary=staff_in.base_salary or 0.0,
         commission_type=commission_type,
         commission_value=staff_in.commission_value or 0.0,
+        owner=current_account["username"],
     )
     db.add(db_staff)
     db.commit()
@@ -49,9 +53,12 @@ def list_staff(
         None, alias="status", description="按状态过滤：active/resigned"
     ),
     db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> List[schemas.StaffRead]:
     """员工列表，可按状态过滤。"""
-    query = db.query(models.Staff)
+    query = db.query(models.Staff).filter(
+        models.Staff.owner == current_account["username"]
+    )
     if status_filter:
         query = query.filter(models.Staff.status == status_filter)
     return query.order_by(models.Staff.id.desc()).all()
@@ -63,10 +70,20 @@ def list_staff(
     summary="更新员工信息",
 )
 def update_staff(
-    staff_id: int, staff_in: schemas.StaffUpdate, db: Session = Depends(get_db)
+    staff_id: int,
+    staff_in: schemas.StaffUpdate,
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> schemas.StaffRead:
     """更新员工信息（部分字段可选）。"""
-    db_staff = db.query(models.Staff).filter(models.Staff.id == staff_id).first()
+    db_staff = (
+        db.query(models.Staff)
+        .filter(
+            models.Staff.id == staff_id,
+            models.Staff.owner == current_account["username"],
+        )
+        .first()
+    )
     if not db_staff:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="员工不存在"

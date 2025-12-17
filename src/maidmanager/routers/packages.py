@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
+from ..security import get_current_account
 
 router = APIRouter(prefix="/api/packages", tags=["packages"])
 
@@ -14,9 +15,17 @@ router = APIRouter(prefix="/api/packages", tags=["packages"])
     response_model=List[schemas.ServicePackageRead],
     summary="套餐列表",
 )
-def list_packages(db: Session = Depends(get_db)) -> List[schemas.ServicePackageRead]:
+def list_packages(
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
+) -> List[schemas.ServicePackageRead]:
     """查询所有套餐，按创建顺序返回。"""
-    return db.query(models.ServicePackage).order_by(models.ServicePackage.id).all()
+    return (
+        db.query(models.ServicePackage)
+        .filter(models.ServicePackage.owner == current_account["username"])
+        .order_by(models.ServicePackage.id)
+        .all()
+    )
 
 
 @router.post(
@@ -26,7 +35,9 @@ def list_packages(db: Session = Depends(get_db)) -> List[schemas.ServicePackageR
     summary="新增套餐",
 )
 def create_package(
-    payload: schemas.ServicePackageCreate, db: Session = Depends(get_db)
+    payload: schemas.ServicePackageCreate,
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> schemas.ServicePackageRead:
     if payload.duration_minutes <= 0:
         raise HTTPException(
@@ -45,6 +56,7 @@ def create_package(
         price=payload.price,
         description=payload.description,
         default_commission=payload.default_commission or 0.0,
+        owner=current_account["username"],
     )
     db.add(db_pkg)
     db.commit()
@@ -61,10 +73,14 @@ def update_package(
     package_id: int,
     payload: schemas.ServicePackageUpdate,
     db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> schemas.ServicePackageRead:
     db_pkg = (
         db.query(models.ServicePackage)
-        .filter(models.ServicePackage.id == package_id)
+        .filter(
+            models.ServicePackage.id == package_id,
+            models.ServicePackage.owner == current_account["username"],
+        )
         .first()
     )
     if not db_pkg:
@@ -102,6 +118,7 @@ def update_package(
 def delete_package(
     package_id: int,
     db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
 ) -> None:
     """删除套餐。
 
@@ -110,7 +127,10 @@ def delete_package(
     """
     db_pkg = (
         db.query(models.ServicePackage)
-        .filter(models.ServicePackage.id == package_id)
+        .filter(
+            models.ServicePackage.id == package_id,
+            models.ServicePackage.owner == current_account["username"],
+        )
         .first()
     )
     if not db_pkg:

@@ -30,6 +30,7 @@ class Staff(Base):
     nickname = Column(String, nullable=True)
     phone = Column(String, nullable=True)
     status = Column(String, default="active")  # active / resigned
+    owner = Column(String, nullable=False, index=True, default="manager")
 
     base_salary = Column(Float, default=0.0)
     commission_type = Column(
@@ -54,6 +55,7 @@ class WorkShift(Base):
     start_time = Column(String, nullable=False)  # HH:MM:ss
     end_time = Column(String, nullable=False)  # HH:MM:ss
     created_at = Column(DateTime, default=datetime.utcnow)
+    owner = Column(String, nullable=False, index=True, default="manager")
 
     staff = relationship("Staff", back_populates="work_shifts")
 
@@ -84,6 +86,7 @@ class Order(Base):
     status = Column(String, default="pending")  # pending / in_progress / finished / completed / cancelled
     note = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    owner = Column(String, nullable=False, index=True, default="manager")
 
     staff = relationship("Staff", back_populates="orders")
     package = relationship("ServicePackage", uselist=False)
@@ -100,6 +103,7 @@ class Expense(Base):
     expense_date = Column(String, nullable=False)  # YYYY-MM-DD
     category = Column(String, nullable=True)  # rent / utilities / supplies
     note = Column(Text, nullable=True)
+    owner = Column(String, nullable=False, index=True, default="manager")
 
 
 class ServicePackage(Base):
@@ -113,6 +117,7 @@ class ServicePackage(Base):
     price = Column(Float, nullable=False)  # 套餐金额
     description = Column(Text, nullable=True)
     default_commission = Column(Float, default=0.0)  # 默认提成金额（作为员工配置的参考）
+    owner = Column(String, nullable=False, index=True, default="manager")
 
 
 class StaffPackageCommission(Base):
@@ -124,3 +129,4 @@ class StaffPackageCommission(Base):
     staff_id = Column(Integer, ForeignKey("staff.id"), nullable=False)
     package_id = Column(Integer, ForeignKey("service_packages.id"), nullable=False)
     commission_amount = Column(Float, nullable=False, default=0.0)
+    owner = Column(String, nullable=False, index=True, default="manager")

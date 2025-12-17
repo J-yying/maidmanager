@@ -14,7 +14,7 @@ from .routers import (
 
 app = FastAPI(
     title="MaidManager API",
-    description="女仆店内部管理系统后端（MVP 版本）。",
+    description="店铺内部管理系统后端（MVP 版本）。",
     version="1.0.0",
 )
 
