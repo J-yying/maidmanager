@@ -210,6 +210,14 @@
     | id | int | 排班ID（路径参数） |
 
   - 出参：无（204），若当日存在未取消订单则报错
+- `GET /api/roster/marks`
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | month | str | 月份 YYYY-MM |
+
+  - 出参：有排班的日期列表（字符串数组，如 `["2025-12-16", ...]`）
 
 ### 3.5 订单/预约
 - `GET /api/orders/day_view`
@@ -249,6 +257,14 @@
     | status | str | 状态 |
     | total_amount | float | 实收金额 |
     | note | str | 备注（可空） |
+- `GET /api/orders/marks`
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | month | str | 月份 YYYY-MM |
+
+  - 出参：存在进行中/待结算/已完成订单的日期列表（字符串数组）
 - `GET /api/available_staff`
   - 入参：
 
@@ -378,6 +394,43 @@
     | total_salary | float | 总薪资 |
     | total_expenses | float | 总支出 |
     | net_profit | float | 净利润 |
+- `GET /api/finance/attendance`
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | month | str | 月份 YYYY-MM |
+
+  - 出参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | month | str | 月份 |
+    | items | list | 按员工出勤汇总 |
+    | items[].staff_id | int | 员工ID |
+    | items[].staff_name | str | 员工姓名 |
+    | items[].shift_days | int | 排班天数 |
+    | items[].shift_hours | float | 排班时长（小时） |
+    | items[].completed_order_count | int | 已完成订单数 |
+    | items[].completed_order_hours | float | 已完成订单总时长（小时，基于 booked_minutes） |
+- `GET /api/finance/roster_overview`
+  - 入参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | month | str | 月份 YYYY-MM |
+
+  - 出参：
+
+    | 字段 | 类型 | 说明 |
+    | --- | --- | --- |
+    | month | str | 月份 |
+    | total_shift_hours | float | 总排班时长（小时） |
+    | total_package_hours | float | 套餐总钟数（小时，基于 booked_minutes） |
+    | shift_days | int | 排班天数 |
+    | avg_daily_shift_hours | float | 日均排班时长（小时） |
+    | earliest_start | str | 最早开始时间（HH:MM:ss，可空） |
+    | latest_end | str | 最晚结束时间（HH:MM:ss，可空） |
 
 ## 4. 前后端交互与流程
 - 登录后前端保存 token，axios header 自动带 Authorization。
