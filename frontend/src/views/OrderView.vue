@@ -10,13 +10,14 @@
           value-format="YYYY-MM-DD"
           @panel-change="onDatePanelChange"
           @change="onDateChange"
-        />
-        <template #default="cell">
-          <div class="picker-cell">
-            <span class="text">{{ cell.text }}</span>
-            <span v-if="isOrderMarked(cell.date)" class="mark-dot" />
-          </div>
-        </template>
+        >
+          <template #default="cell">
+            <div class="picker-cell">
+              <span class="text">{{ cell.text }}</span>
+              <span v-if="isOrderMarked(cell.date)" class="mark-dot" />
+            </div>
+          </template>
+        </el-date-picker>
       </div>
       <div class="right">
         <el-button type="primary" @click="fetchDaySchedules">刷新日历</el-button>

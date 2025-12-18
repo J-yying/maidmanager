@@ -9,13 +9,14 @@
           value-format="YYYY-MM-DD"
           @panel-change="onPanelChange"
           @change="onDateChange"
-        />
-        <template #default="cell">
-          <div class="picker-cell">
-            <span class="text">{{ cell.text }}</span>
-            <span v-if="isShiftMarked(cell.date)" class="mark-dot" />
-          </div>
-        </template>
+        >
+          <template #default="cell">
+            <div class="picker-cell">
+              <span class="text">{{ cell.text }}</span>
+              <span v-if="isShiftMarked(cell.date)" class="mark-dot" />
+            </div>
+          </template>
+        </el-date-picker>
         <el-button type="primary" @click="fetchRoster">刷新排班</el-button>
       </div>
       <div class="right">
