@@ -8,8 +8,15 @@
           type="date"
           placeholder="选择日期"
           value-format="YYYY-MM-DD"
+          @panel-change="onDatePanelChange"
           @change="onDateChange"
         />
+        <template #default="cell">
+          <div class="picker-cell">
+            <span class="text">{{ cell.text }}</span>
+            <span v-if="isOrderMarked(cell.date)" class="mark-dot" />
+          </div>
+        </template>
       </div>
       <div class="right">
         <el-button type="primary" @click="fetchDaySchedules">刷新日历</el-button>
@@ -126,18 +133,18 @@
                 </el-table-column>
               </el-table>
             </el-tab-pane>
-            <el-tab-pane label="进行中" name="in_progress">
-              <el-table :data="inProgressOrders" border style="width: 100%">
-                <el-table-column prop="staff_name" label="员工" width="100" />
-                <el-table-column prop="customer_name" label="客户" />
-                <el-table-column prop="start_datetime" label="实际开始时间" />
-                <el-table-column prop="end_datetime" label="预计结束时间" />
-                <el-table-column prop="package_name" label="套餐" />
-                <el-table-column label="操作" width="200">
-                  <template #default="{ row }">
-                    <el-button type="text" size="small" @click="openExtendDialog(row)">
-                      续钟
-                    </el-button>
+        <el-tab-pane label="进行中" name="in_progress">
+          <el-table :data="inProgressOrders" border style="width: 100%">
+            <el-table-column prop="staff_name" label="员工" width="100" />
+            <el-table-column prop="customer_name" label="客户" />
+            <el-table-column prop="start_datetime" label="实际开始时间" />
+            <el-table-column prop="end_datetime" label="预计结束时间" />
+            <el-table-column prop="package_name" label="基础套餐" />
+            <el-table-column label="操作" width="200">
+              <template #default="{ row }">
+                <el-button type="text" size="small" @click="openExtendDialog(row)">
+                  续钟
+                </el-button>
                     <el-button type="text" size="small" @click="openFinishDialog(row)">
                       结束服务
                     </el-button>
@@ -152,8 +159,11 @@
                 <el-table-column prop="start_datetime" label="开始时间" />
                 <el-table-column prop="end_datetime" label="结束时间" />
                 <el-table-column prop="package_name" label="套餐" />
-                <el-table-column label="操作" width="120">
+                <el-table-column label="操作" width="160">
                   <template #default="{ row }">
+                    <el-button type="text" size="small" @click="openExtendDialog(row)">
+                      续钟
+                    </el-button>
                     <el-button type="text" size="small" @click="openSettleDialog(row)">
                       结算
                     </el-button>
@@ -249,8 +259,43 @@
         <el-form-item label="客户">
           <span>{{ settleForm.customer_name || "-" }}</span>
         </el-form-item>
-        <el-form-item label="套餐">
-          <span>{{ settleForm.package_name || "-" }}</span>
+        <el-form-item label="基础套餐">
+          <el-select v-model="settleForm.package_id" placeholder="选择套餐" @change="onSettlePackagesChange">
+            <el-option
+              v-for="p in packages"
+              :key="p.id"
+              :value="p.id"
+              :label="`${p.name}（${p.duration_minutes}分钟 ¥${p.price}）`"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="续钟套餐">
+          <div class="extension-add">
+            <el-select
+              v-model="settleForm.extension_select_id"
+              placeholder="选择续钟套餐"
+              class="extension-select"
+            >
+              <el-option
+                v-for="p in packages"
+                :key="p.id"
+                :value="p.id"
+                :label="`${p.name}（${p.duration_minutes}分钟 ¥${p.price}）`"
+              />
+            </el-select>
+            <el-button type="primary" plain @click="addSettleExtension">添加</el-button>
+          </div>
+          <div v-if="settleExtensionItems.length" class="extension-tags">
+            <el-tag
+              v-for="(item, idx) in settleExtensionItems"
+              :key="`${item.id}-${idx}`"
+              closable
+              @close="removeSettleExtension(idx)"
+            >
+              {{ item.label }}
+            </el-tag>
+          </div>
+          <div v-else class="extra-hint">尚未选择续钟套餐</div>
         </el-form-item>
         <el-form-item label="实际开始">
           <el-time-picker
@@ -292,6 +337,16 @@
 
     <el-dialog v-model="startDialogVisible" title="开始服务" width="400px">
       <el-form :model="startForm" label-width="100px">
+        <el-form-item label="基础套餐">
+          <el-select v-model="startForm.package_id" placeholder="选择套餐" @change="onStartPackageChange">
+            <el-option
+              v-for="p in packages"
+              :key="p.id"
+              :value="p.id"
+              :label="`${p.name}（${p.duration_minutes}分钟）`"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="实际开始">
           <el-time-picker v-model="startForm.start_time" format="HH:mm" value-format="HH:mm" placeholder="选择开始时间" />
         </el-form-item>
@@ -381,6 +436,7 @@ const loadingAvailable = ref(false);
 const selectedStaffId = ref(null);
 const creatingOrder = ref(false);
 const daySchedules = ref([]);
+const orderMarkedDates = ref([]);
 
 const packages = ref([]);
 const selectedPackageId = ref(null);
@@ -413,6 +469,71 @@ const selectedStaff = computed(() =>
 
 const selectedPackage = computed(() =>
   packages.value.find((p) => p.id === selectedPackageId.value)
+);
+
+const orderMarkMonth = (dateStr) => dayjs(dateStr).format("YYYY-MM");
+
+const fetchOrderMarks = async (monthStr) => {
+  const targetMonth = monthStr || orderMarkMonth(selectedDate.value);
+  if (!targetMonth) return;
+  try {
+    const { data } = await api.get("/orders/marks", {
+      params: { month: targetMonth }
+    });
+    orderMarkedDates.value = data || [];
+  } catch {
+    // 忽略标记获取失败
+  }
+};
+
+const isOrderMarked = (date) => {
+  const value = dayjs(date).format("YYYY-MM-DD");
+  return orderMarkedDates.value.includes(value);
+};
+
+const findPackageById = (id) => {
+  if (id === null || id === undefined) return undefined;
+  return packages.value.find((p) => p.id === Number(id));
+};
+
+const parseExtensionIds = (raw) => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map((v) => Number(v)).filter((v) => !Number.isNaN(v));
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.map((v) => Number(v)).filter((v) => !Number.isNaN(v));
+    }
+  } catch (err) {
+    // ignore
+  }
+  return [];
+};
+
+const calcSettleAmount = (baseId, extensionIds = []) => {
+  const basePkg = findPackageById(baseId);
+  const basePrice = basePkg ? basePkg.price || 0 : 0;
+  const extTotal = (extensionIds || []).reduce((sum, pid) => {
+    const pkg = findPackageById(pid);
+    return sum + (pkg?.price || 0);
+  }, 0);
+  return basePrice + extTotal;
+};
+
+const settleExtensionItems = computed(() =>
+  (settleForm.extension_ids || []).map((pid, idx) => {
+    const pkg = findPackageById(pid);
+    const labelName = pkg?.name ? pkg.name : `套餐 ${pid}`;
+    const price = pkg?.price || 0;
+    const duration = pkg?.duration_minutes || 0;
+    return {
+      id: pid,
+      idx,
+      label: `${labelName}（${duration}分钟 ￥${price}）`
+    };
+  })
 );
 
 const activeTab = ref("all");
@@ -449,6 +570,15 @@ const onDateChange = () => {
   if (!selectedDate.value) return;
   fetchDaySchedules();
   fetchActiveOrders();
+  fetchOrderMarks();
+};
+
+const onDatePanelChange = (value) => {
+  const m =
+    value && typeof value === "object" && value.month !== undefined && value.year !== undefined
+      ? `${value.year}-${String(value.month + 1).padStart(2, "0")}`
+      : dayjs(value).format("YYYY-MM");
+  fetchOrderMarks(m);
 };
 
 const timeStrToMinutes = (timeStr) => {
@@ -689,8 +819,20 @@ const startDialogVisible = ref(false);
 const startForm = reactive({
   id: null,
   start_time: "",
-  end_time: ""
+  end_time: "",
+  package_id: null
 });
+
+const onStartPackageChange = (pkgId) => {
+  const pkg = findPackageById(pkgId);
+  if (!pkg) return;
+  const startStr = startForm.start_time || dayjs().format("HH:mm");
+  startForm.start_time = startStr;
+  const start = dayjs(`${selectedDate.value} ${startStr}:00`);
+  if (start.isValid()) {
+    startForm.end_time = start.add(pkg.duration_minutes || 0, "minute").format("HH:mm");
+  }
+};
 
 const openStartDialog = (row) => {
   const pkg = packages.value.find((p) => p.id === row.package_id);
@@ -701,12 +843,17 @@ const openStartDialog = (row) => {
   startForm.id = row.id;
   startForm.start_time = suggestedStart;
   startForm.end_time = suggestedEnd;
+  startForm.package_id = row.package_id || null;
   startDialogVisible.value = true;
 };
 
 const submitStart = async () => {
   if (!startForm.id || !startForm.start_time || !startForm.end_time) {
     ElMessage.warning("请选择实际开始/结束时间");
+    return;
+  }
+  if (!startForm.package_id) {
+    ElMessage.warning("请选择基础套餐");
     return;
   }
   const start = dayjs(`${selectedDate.value} ${startForm.start_time}:00`);
@@ -717,6 +864,7 @@ const submitStart = async () => {
   }
   try {
     await api.put(`/orders/${startForm.id}`, {
+      package_id: startForm.package_id,
       start_datetime: start.format("YYYY-MM-DD HH:mm:ss"),
       end_datetime: end.format("YYYY-MM-DD HH:mm:ss"),
       status: "in_progress"
@@ -771,6 +919,9 @@ const openFinishDialog = (row) => {
   finishForm.start_time = row.start_datetime ? row.start_datetime.split(" ")[1]?.slice(0, 5) : "";
   const now = dayjs();
   finishForm.end_time = now.format("HH:mm");
+  settleForm.package_id = row.package_id || null;
+  settleForm.extension_ids = parseExtensionIds(row.extension_package_ids);
+  settleForm.extension_select_id = null;
   finishDialogVisible.value = true;
 };
 
@@ -852,7 +1003,7 @@ const submitExtend = async () => {
   const base = dayjs(`${selectedDate.value} ${extendForm.base_end}:00`);
   const newEnd = base.add(pkg.duration_minutes || 0, "minute");
   const row = extendCurrentRow.value;
-  const baseTotal = (row?.total_amount || 0) + (row?.extra_amount || 0);
+  const baseTotal = row?.total_amount || 0;
   const newTotal = baseTotal + (pkg.price || 0);
   const newExtra = (row?.extra_amount || 0) + (pkg.price || 0);
   const noteParts = [];
@@ -864,7 +1015,10 @@ const submitExtend = async () => {
       end_datetime: newEnd.format("YYYY-MM-DD HH:mm:ss"),
       total_amount: newTotal,
       extra_amount: newExtra,
-      note: newNote
+      note: newNote,
+      extend_minutes: pkg.duration_minutes,
+      extend_package_id: pkg.id,
+      status: "in_progress"
     });
     ElMessage.success("续钟成功");
     extendDialogVisible.value = false;
@@ -885,16 +1039,43 @@ const settleForm = reactive({
   payment_method: "",
   note: "",
   start_time: "",
-  end_time: ""
+  end_time: "",
+  package_id: null,
+  extension_ids: [],
+  extension_select_id: null
 });
+
+const onSettlePackagesChange = () => {
+  settleForm.total_amount = calcSettleAmount(settleForm.package_id, settleForm.extension_ids);
+};
+
+const addSettleExtension = () => {
+  const id = Number(settleForm.extension_select_id);
+  if (!id || Number.isNaN(id)) {
+    ElMessage.warning("请选择续钟套餐后再添加");
+    return;
+  }
+  settleForm.extension_ids.push(id);
+  settleForm.extension_select_id = null;
+  onSettlePackagesChange();
+};
+
+const removeSettleExtension = (idx) => {
+  settleForm.extension_ids.splice(idx, 1);
+  onSettlePackagesChange();
+};
+
 const settling = ref(false);
 
 const openSettleDialog = (row) => {
   settleForm.id = row.id;
   settleForm.staff_name = row.staff_name;
   settleForm.customer_name = row.customer_name || "";
-  settleForm.package_name = row.package_name || "";
-  settleForm.total_amount = row.total_amount || 0;
+  settleForm.package_id = row.package_id || null;
+  settleForm.extension_ids = parseExtensionIds(row.extension_package_ids);
+  settleForm.extension_select_id = null;
+  const computedAmount = calcSettleAmount(settleForm.package_id, settleForm.extension_ids);
+  settleForm.total_amount = computedAmount || row.total_amount || 0;
   settleForm.payment_method = row.payment_method || "";
   settleForm.note = row.note || "";
   settleForm.start_time = row.start_datetime
@@ -923,6 +1104,10 @@ const settleOrder = async () => {
     ElMessage.warning("请填写实收金额和支付方式");
     return;
   }
+  if (!settleForm.package_id) {
+    ElMessage.warning("请选择基础套餐");
+    return;
+  }
   const start = settleForm.start_time
     ? dayjs(`${selectedDate.value} ${settleForm.start_time}:00`)
     : null;
@@ -935,7 +1120,15 @@ const settleOrder = async () => {
   }
   settling.value = true;
   try {
+    const computedAmount = calcSettleAmount(settleForm.package_id, settleForm.extension_ids);
+    if (!computedAmount || computedAmount <= 0) {
+      ElMessage.warning("结算金额异常，请检查套餐选择");
+      settling.value = false;
+      return;
+    }
     const payload = {
+      package_id: settleForm.package_id,
+      extension_package_ids: settleForm.extension_ids,
       total_amount: settleForm.total_amount,
       payment_method: settleForm.payment_method,
       note: settleForm.note || null,
@@ -976,6 +1169,7 @@ onMounted(() => {
   fetchDaySchedules();
   fetchPackages();
   fetchActiveOrders();
+  fetchOrderMarks();
   timeoutTimer = setInterval(checkTimeouts, 30000);
 });
 
@@ -1119,6 +1313,56 @@ onUnmounted(() => {
 .legend-box.active { background: rgba(255, 112, 67, 0.85); }
 .legend-box.completed { background: rgba(24, 144, 255, 0.9); }
 
+.extension-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.extension-select {
+  min-width: 240px;
+  flex: 1;
+  max-width: 100%;
+}
+
+.extension-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.order-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #666;
+}
+.order-legend .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #67c23a;
+}
+
+.picker-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.mark-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #67c23a;
+}
+
 .time-scale {
   display: flex;
   justify-content: space-between;
@@ -1159,5 +1403,20 @@ onUnmounted(() => {
 .empty-hint {
   font-size: 13px;
   color: #999;
+}
+
+:deep(.has-order .el-date-table-cell__text) {
+  position: relative;
+}
+:deep(.has-order .el-date-table-cell__text::after) {
+  content: "";
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #67c23a;
+  transform: translateX(-50%);
 }
 </style>

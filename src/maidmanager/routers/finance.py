@@ -145,3 +145,167 @@ def get_finance_dashboard(
         total_expenses=float(total_expenses or 0.0),
         net_profit=net_profit,
     )
+
+
+@router.get(
+    "/attendance",
+    response_model=schemas.AttendanceResponse,
+    summary="员工出勤统计（排班 + 已完成订单）",
+)
+def get_attendance(
+    month: str = Query(..., description="月份 YYYY-MM"),
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
+) -> schemas.AttendanceResponse:
+    """按月汇总员工排班天数/时长，以及已完成订单数/时长。"""
+    if len(month) != 7 or month[4] != "-":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="月份格式需为 YYYY-MM"
+        )
+    like_pattern = f"{month}-%"
+
+    # 排班汇总
+    shift_duration_hours = (
+        (func.julianday(models.WorkShift.work_date + " " + models.WorkShift.end_time)
+         - func.julianday(models.WorkShift.work_date + " " + models.WorkShift.start_time))
+        * 24
+    )
+    shift_rows = (
+        db.query(
+            models.WorkShift.staff_id.label("staff_id"),
+            func.count(func.distinct(models.WorkShift.work_date)).label("shift_days"),
+            func.coalesce(func.sum(shift_duration_hours), 0).label("shift_hours"),
+        )
+        .filter(
+            models.WorkShift.owner == current_account["username"],
+            models.WorkShift.work_date.like(like_pattern),
+        )
+        .group_by(models.WorkShift.staff_id)
+        .all()
+    )
+    shift_map = {
+        row.staff_id: {
+            "shift_days": row.shift_days,
+            "shift_hours": float(row.shift_hours or 0),
+        }
+        for row in shift_rows
+    }
+
+    # 订单汇总（排除已取消，仅统计已完成）
+    active_status = ("completed",)
+    order_rows = (
+        db.query(
+            models.Order.staff_id.label("staff_id"),
+            func.count(models.Order.id).label("cnt"),
+            func.coalesce(
+                func.sum(
+                    func.coalesce(models.Order.booked_minutes, models.Order.duration_minutes, 0)
+                ),
+                0,
+            ).label("order_minutes"),
+        )
+        .filter(
+            models.Order.owner == current_account["username"],
+            models.Order.status.in_(active_status),
+            models.Order.order_date.like(like_pattern),
+        )
+        .group_by(models.Order.staff_id)
+        .all()
+    )
+    order_map = {
+        row.staff_id: {
+            "count": row.cnt,
+            "hours": float(row.order_minutes or 0) / 60.0,
+        }
+        for row in order_rows
+    }
+
+    # 员工名称映射
+    staff_rows = (
+        db.query(models.Staff.id, models.Staff.name)
+        .filter(models.Staff.owner == current_account["username"])
+        .all()
+    )
+    items: list[schemas.StaffAttendanceItem] = []
+    for staff_id, staff_name in staff_rows:
+        shift_info = shift_map.get(staff_id, {"shift_days": 0, "shift_hours": 0.0})
+        order_info = order_map.get(staff_id, {"count": 0, "hours": 0.0})
+        items.append(
+            schemas.StaffAttendanceItem(
+                staff_id=staff_id,
+                staff_name=staff_name,
+                shift_days=shift_info["shift_days"],
+                shift_hours=shift_info["shift_hours"],
+                completed_order_count=order_info["count"],
+                completed_order_hours=order_info["hours"],
+            )
+        )
+
+    return schemas.AttendanceResponse(month=month, items=items)
+
+
+@router.get(
+    "/roster_overview",
+    response_model=schemas.RosterOverviewResponse,
+    summary="排班概览（按月）",
+)
+def get_roster_overview(
+    month: str = Query(..., description="月份 YYYY-MM"),
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
+) -> schemas.RosterOverviewResponse:
+    """按月汇总排班总时长/天数/日均时长，并给出最早/最晚排班时间。"""
+    if len(month) != 7 or month[4] != "-":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="月份格式需为 YYYY-MM"
+        )
+    like_pattern = f"{month}-%"
+    active_status = ("pending", "in_progress", "finished", "completed")
+
+    # 总时长、天数、最早/最晚
+    shift_duration_hours = (
+        (func.julianday(models.WorkShift.work_date + " " + models.WorkShift.end_time)
+         - func.julianday(models.WorkShift.work_date + " " + models.WorkShift.start_time))
+        * 24
+    )
+    rows = (
+        db.query(
+            func.coalesce(func.sum(shift_duration_hours), 0).label("total_hours"),
+            func.count(func.distinct(models.WorkShift.work_date)).label("shift_days"),
+            func.min(models.WorkShift.start_time).label("earliest"),
+            func.max(models.WorkShift.end_time).label("latest"),
+        )
+        .filter(
+            models.WorkShift.owner == current_account["username"],
+            models.WorkShift.work_date.like(like_pattern),
+        )
+        .first()
+    )
+    total_hours = float(rows.total_hours or 0) if rows else 0.0
+    shift_days = int(rows.shift_days or 0) if rows else 0
+    avg_daily = total_hours / shift_days if shift_days else 0.0
+    earliest = rows.earliest if rows and rows.earliest else None
+    latest = rows.latest if rows and rows.latest else None
+
+    pkg_minutes_sum = (
+        db.query(
+            func.coalesce(func.sum(func.coalesce(models.Order.booked_minutes, 0)), 0)
+        )
+        .filter(
+            models.Order.owner == current_account["username"],
+            models.Order.status.in_(active_status),
+            models.Order.order_date.like(like_pattern),
+        )
+        .scalar()
+    )
+    package_hours = float(pkg_minutes_sum or 0) / 60.0
+
+    return schemas.RosterOverviewResponse(
+        month=month,
+        total_shift_hours=total_hours,
+        total_package_hours=package_hours,
+        shift_days=shift_days,
+        avg_daily_shift_hours=avg_daily,
+        earliest_start=earliest,
+        latest_end=latest,
+    )

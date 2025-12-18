@@ -58,9 +58,11 @@
 | start_datetime | str | 开始时间 YYYY-MM-DD HH:MM:ss |
 | end_datetime | str | 结束时间 YYYY-MM-DD HH:MM:ss |
 | duration_minutes | int | 时长（分钟） |
+| booked_minutes | int | 预定总时长（基础套餐 + 续钟累加，分钟） |
 | total_amount | float | 实收金额（元，含续钟累加） |
 | package_id | int | 套餐ID（可空） |
 | package_name | str | 套餐名称快照（可空） |
+| extension_package_ids | str | 续钟套餐 ID 列表（JSON 字符串，允许同一套餐多次续钟） |
 | extra_amount | float | 额外金额（续钟/加项） |
 | payment_method | str | 支付方式：wechat/alipay/cash（可空） |
 | commission_amount | float | 提成金额（元） |
@@ -402,8 +404,13 @@
 - 时间轴动态刻度（排班最早/最晚），色块分层：在班/待开始/进行中/已完成。
 - 时间选择支持任意分钟，自动刷新可用员工；进行中可续钟，结束校验时间。
 - 支出录入与列表分栏，删除需确认，表单可重置；提成输入带“%”附加栏。
+- 财务：出勤/排班概览按小时聚合；套餐钟数基于 `booked_minutes`。
+- 日历标记：提供 `/api/roster/marks` 与 `/api/orders/marks` 返回当月有排班/订单的日期，前端在排班、工作管理日历上显示标记（当前标记渲染存在问题，见 TODO）。
 
 ## 7. 部署与运维
 - Nginx 80 反代 uvicorn 8000，静态前端由 Nginx 提供。
 - `scripts/deploy.sh`：git pull → 虚拟环境依赖 → 前端构建 → 同步静态 → 重启后端、重载 Nginx。
 - 日志：systemd（后端）、Nginx；默认 SQLite 存储（可迁移其他 DB）。
+
+## 8. TODO
+- Element Plus 日期选择器未正确展示排班/订单绿点标记，需排查自定义单元格插槽与样式覆盖，确保 `/api/roster/marks`、`/api/orders/marks` 返回的日期能落盘显示。

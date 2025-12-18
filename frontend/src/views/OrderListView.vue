@@ -27,9 +27,32 @@
       </el-table-column>
       <el-table-column prop="start_datetime" label="开始时间" width="180" />
       <el-table-column prop="end_datetime" label="结束时间" width="180" />
-      <el-table-column prop="package_name" label="套餐名称" />
-      <el-table-column prop="total_amount" label="金额" width="100" />
-      <el-table-column prop="extra_amount" label="额外金额" width="100" />
+      <el-table-column label="基础套餐" min-width="160">
+        <template #default="{ row }">
+          <div>{{ basePkgName(row) }}</div>
+          <div class="sub-text">￥{{ formatNumber(basePkgPrice(row)) }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column label="续钟套餐" min-width="200">
+        <template #default="{ row }">
+          <div v-if="extensionSummary(row).items.length">
+            <div v-for="item in extensionSummary(row).items" :key="item.key">
+              {{ item.label }}
+            </div>
+          </div>
+          <div v-else class="sub-text">无续钟</div>
+        </template>
+      </el-table-column>
+      <el-table-column label="续钟金额" width="110">
+        <template #default="{ row }">
+          ￥{{ formatNumber(extensionSummary(row).total) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="total_amount" label="总金额" width="110">
+        <template #default="{ row }">
+          ￥{{ formatNumber(row.total_amount || 0) }}
+        </template>
+      </el-table-column>
       <el-table-column prop="note" label="备注" />
       <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
@@ -163,11 +186,66 @@ const formatDateTime = (value) => {
 const fetchPackages = async () => {
   try {
     const { data } = await api.get("/packages");
-    packages.value = data;
+  packages.value = data;
   } catch (err) {
     ElMessage.error("获取套餐列表失败");
   }
 };
+
+const findPackageById = (id) => {
+  if (id === null || id === undefined) return undefined;
+  return packages.value.find((p) => p.id === Number(id));
+};
+
+const parseExtensionIds = (raw) => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map((v) => Number(v)).filter((v) => !Number.isNaN(v));
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.map((v) => Number(v)).filter((v) => !Number.isNaN(v));
+    }
+  } catch (err) {
+    // ignore
+  }
+  return [];
+};
+
+const basePkgName = (row) => {
+  const pkg = findPackageById(row.package_id);
+  return pkg ? pkg.name : row.package_name || "-";
+};
+
+const basePkgPrice = (row) => {
+  const pkg = findPackageById(row.package_id);
+  return pkg ? pkg.price || 0 : 0;
+};
+
+const extensionSummary = (row) => {
+  const ids = parseExtensionIds(row.extension_package_ids);
+  if (!ids.length) return { items: [], total: 0 };
+  const counter = ids.reduce((acc, id) => {
+    const key = Number(id);
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const items = Object.entries(counter).map(([id, count]) => {
+    const pkg = findPackageById(id);
+    const price = pkg?.price || 0;
+    const labelName = pkg?.name ? pkg.name : `套餐 ${id}`;
+    return {
+      key: `${id}-${count}`,
+      label: `${labelName} ×${count}（￥${formatNumber(price)}）`,
+      total: price * count
+    };
+  });
+  const total = items.reduce((sum, item) => sum + item.total, 0);
+  return { items, total };
+};
+
+const formatNumber = (n) => Number(n || 0).toFixed(2);
 
 const openEdit = (row) => {
   editForm.id = row.id;
@@ -239,5 +317,10 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.sub-text {
+  color: #888;
+  font-size: 12px;
 }
 </style>

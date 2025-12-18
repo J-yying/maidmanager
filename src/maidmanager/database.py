@@ -26,6 +26,7 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _ensure_owner_columns()
+    _ensure_booked_minutes()
     _dedupe_work_shifts()
     _ensure_indexes()
 
@@ -58,6 +59,41 @@ def _ensure_owner_columns() -> None:
                         "ADD COLUMN owner VARCHAR NOT NULL DEFAULT 'manager'"
                     )
                 )
+
+
+def _ensure_booked_minutes() -> None:
+    """为订单增加 booked_minutes/extension_package_ids 字段，并回填。"""
+    with engine.begin() as conn:
+        if not _column_exists(conn, "orders", "booked_minutes"):
+            conn.execute(
+                text(
+                    "ALTER TABLE orders "
+                    "ADD COLUMN booked_minutes INTEGER NOT NULL DEFAULT 0"
+                )
+            )
+        if not _column_exists(conn, "orders", "extension_package_ids"):
+            conn.execute(
+                text(
+                    "ALTER TABLE orders "
+                    "ADD COLUMN extension_package_ids VARCHAR"
+                )
+            )
+        # 回填：若 booked_minutes 为空或 0，则用套餐时长；无套餐则置 0（不再使用 duration_minutes）
+        conn.execute(
+            text(
+                """
+                UPDATE orders
+                SET booked_minutes = CASE
+                    WHEN booked_minutes IS NULL OR booked_minutes = 0 THEN
+                        COALESCE(
+                            (SELECT duration_minutes FROM service_packages sp WHERE sp.id = orders.package_id),
+                            0
+                        )
+                    ELSE booked_minutes
+                END
+                """
+            )
+        )
 
 
 def _dedupe_work_shifts() -> None:

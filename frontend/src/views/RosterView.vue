@@ -7,8 +7,15 @@
           type="date"
           placeholder="选择日期"
           value-format="YYYY-MM-DD"
-          @change="fetchRoster"
+          @panel-change="onPanelChange"
+          @change="onDateChange"
         />
+        <template #default="cell">
+          <div class="picker-cell">
+            <span class="text">{{ cell.text }}</span>
+            <span v-if="isShiftMarked(cell.date)" class="mark-dot" />
+          </div>
+        </template>
         <el-button type="primary" @click="fetchRoster">刷新排班</el-button>
       </div>
       <div class="right">
@@ -89,6 +96,7 @@ import api from "../api/client";
 const selectedDate = ref(dayjs().format("YYYY-MM-DD"));
 const todayStr = dayjs().format("YYYY-MM-DD");
 const shifts = ref([]);
+const markedDates = ref([]);
 const dialogVisible = ref(false);
 const submitting = ref(false);
 const editingId = ref(null);
@@ -107,6 +115,26 @@ const formatTime = (t) => {
   if (!t) return t;
   // 支持 HH:MM 或 HH:MM:SS，统一裁剪为 HH:MM
   return t.slice(0, 5);
+};
+
+const monthOf = (dateStr) => dayjs(dateStr).format("YYYY-MM");
+
+const fetchMarks = async (monthStr) => {
+  const targetMonth = monthStr || monthOf(selectedDate.value);
+  if (!targetMonth) return;
+  try {
+    const { data } = await api.get("/roster/marks", {
+      params: { month: targetMonth }
+    });
+    markedDates.value = data || [];
+  } catch (err) {
+    // 标记失败不阻塞主流程
+  }
+};
+
+const isShiftMarked = (date) => {
+  const value = dayjs(date).format("YYYY-MM-DD");
+  return markedDates.value.includes(value);
 };
 
 const fetchRoster = async () => {
@@ -241,7 +269,21 @@ const submitForm = async () => {
 onMounted(() => {
   fetchStaffOptions();
   fetchRoster();
+  fetchMarks();
 });
+
+const onDateChange = () => {
+  fetchRoster();
+  fetchMarks();
+};
+
+const onPanelChange = (value) => {
+  const m =
+    value && typeof value === "object" && value.month !== undefined && value.year !== undefined
+      ? `${value.year}-${String(value.month + 1).padStart(2, "0")}`
+      : dayjs(value).format("YYYY-MM");
+  fetchMarks(m);
+};
 </script>
 
 <style scoped>
@@ -254,5 +296,36 @@ onMounted(() => {
 .toolbar .left {
   display: flex;
   gap: 8px;
+}
+
+:deep(.has-shift .el-date-table-cell__text) {
+  position: relative;
+}
+:deep(.has-shift .el-date-table-cell__text::after) {
+  content: "";
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #67c23a;
+  transform: translateX(-50%);
+}
+
+.picker-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.mark-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #67c23a;
 }
 </style>

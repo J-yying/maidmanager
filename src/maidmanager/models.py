@@ -73,6 +73,8 @@ class Order(Base):
     start_datetime = Column(String, nullable=False)  # YYYY-MM-DD HH:MM:ss
     end_datetime = Column(String, nullable=False)  # YYYY-MM-DD HH:MM:ss
     duration_minutes = Column(Integer, nullable=True)
+    booked_minutes = Column(Integer, nullable=True, default=0)
+    extension_package_ids = Column(String, nullable=True)  # JSON 数组，续钟套餐ID列表
 
     total_amount = Column(Float, nullable=False)
     payment_method = Column(String, nullable=True)  # wechat / alipay / cash

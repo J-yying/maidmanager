@@ -111,6 +111,9 @@ class RosterCopyRequest(BaseModel):
 class OrderCreate(BaseModel):
     staff_id: int = Field(..., description="员工ID")
     customer_name: Optional[str] = Field(None, description="客户名称")
+    package_id: Optional[int] = Field(
+        None, description="基础套餐ID（必选）"
+    )
     start_datetime: str = Field(
         ..., description="开始时间，格式 YYYY-MM-DD HH:MM:ss"
     )
@@ -118,9 +121,6 @@ class OrderCreate(BaseModel):
         ..., description="结束时间，格式 YYYY-MM-DD HH:MM:ss"
     )
     total_amount: float = Field(..., description="实收金额（元）")
-    package_id: Optional[int] = Field(
-        None, description="套餐ID（可选，仅列表中已有的套餐）"
-    )
     extra_amount: Optional[float] = Field(
         None, description="额外费用（加项、加时等）"
     )
@@ -142,16 +142,23 @@ class OrderUpdate(BaseModel):
     """修改订单时允许更新的字段。"""
 
     customer_name: Optional[str] = Field(None, description="客户名称")
+    package_id: Optional[int] = Field(None, description="基础套餐ID（可选，仅列表中已有的套餐）")
     start_datetime: Optional[str] = Field(
         None, description="开始时间，格式 YYYY-MM-DD HH:MM:ss"
     )
     end_datetime: Optional[str] = Field(
         None, description="结束时间，格式 YYYY-MM-DD HH:MM:ss"
     )
-    total_amount: Optional[float] = Field(None, description="实收金额")
-    package_id: Optional[int] = Field(
-        None, description="套餐ID（可选，仅列表中已有的套餐）"
+    extend_minutes: Optional[int] = Field(
+        None, description="续钟套餐的时长（分钟），可选，用于累加 booked_minutes"
     )
+    extend_package_id: Optional[int] = Field(
+        None, description="续钟套餐ID（可选，配合 extend_minutes 使用）"
+    )
+    extension_package_ids: Optional[List[int]] = Field(
+        None, description="续钟套餐 ID 列表（可选，直接覆盖已有续钟套餐）"
+    )
+    total_amount: Optional[float] = Field(None, description="实收金额")
     extra_amount: Optional[float] = Field(
         None, description="额外费用（加项、加时等）"
     )
@@ -181,9 +188,11 @@ class OrderRead(BaseModel):
     start_datetime: str
     end_datetime: str
     duration_minutes: Optional[int]
+    booked_minutes: Optional[int] = None
     total_amount: float
     package_id: Optional[int] = None
     package_name: Optional[str] = None
+    extension_package_ids: Optional[str] = None
     extra_amount: Optional[float] = 0.0
     payment_method: Optional[str]
     commission_amount: float
@@ -231,6 +240,30 @@ class FinanceDashboardResponse(BaseModel):
     total_salary: float
     total_expenses: float
     net_profit: float
+
+
+class StaffAttendanceItem(BaseModel):
+    staff_id: int
+    staff_name: str
+    shift_days: int
+    shift_hours: float
+    completed_order_count: int
+    completed_order_hours: float
+
+
+class AttendanceResponse(BaseModel):
+    month: str
+    items: List[StaffAttendanceItem]
+
+
+class RosterOverviewResponse(BaseModel):
+    month: str
+    total_shift_hours: float
+    total_package_hours: float
+    shift_days: int
+    avg_daily_shift_hours: float
+    earliest_start: Optional[str] = None
+    latest_end: Optional[str] = None
 
 
 class LoginRequest(BaseModel):

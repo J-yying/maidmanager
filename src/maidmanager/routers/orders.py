@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -153,6 +154,40 @@ def get_day_view(
 
 
 @router.get(
+    "/orders/marks",
+    response_model=List[str],
+    summary="订单日历标记（含进行中/待结算/已完成）",
+)
+def get_order_marks(
+    month: str = Query(..., description="月份 YYYY-MM"),
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
+) -> List[str]:
+    """返回指定月份内存在订单（进行中/待结算/已完成）的日期列表。"""
+    try:
+        datetime.strptime(month, "%Y-%m")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="month 必须为 YYYY-MM 格式",
+        ) from exc
+
+    like_pattern = f"{month}-%"
+    active_status = ("in_progress", "finished", "completed")
+    rows = (
+        db.query(models.Order.order_date)
+        .filter(
+            models.Order.order_date.like(like_pattern),
+            models.Order.status.in_(active_status),
+            models.Order.owner == current_account["username"],
+        )
+        .group_by(models.Order.order_date)
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
+@router.get(
     "/orders/active",
     response_model=List[schemas.OrderRead],
     summary="某日待处理订单列表",
@@ -197,9 +232,11 @@ def list_active_orders(
                 start_datetime=order.start_datetime,
                 end_datetime=order.end_datetime,
                 duration_minutes=order.duration_minutes,
+                booked_minutes=order.booked_minutes,
                 total_amount=order.total_amount,
                 package_id=order.package_id,
                 package_name=order.package_name,
+                extension_package_ids=order.extension_package_ids,
                 extra_amount=order.extra_amount,
                 payment_method=order.payment_method,
                 commission_amount=order.commission_amount,
@@ -321,11 +358,11 @@ def create_order(
             )
             .first()
         )
-        if not pkg:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="指定的套餐不存在",
-            )
+    if pkg is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="必须选择一个有效的套餐",
+        )
 
     start_dt = _parse_dt(order_in.start_datetime)
 
@@ -394,6 +431,7 @@ def create_order(
         start_datetime=start_dt_str,
         end_datetime=end_dt_str,
         duration_minutes=duration_minutes,
+        booked_minutes=pkg.duration_minutes if pkg else 0,
         total_amount=order_in.total_amount,
         package_id=order_in.package_id,
         package_name=pkg.name if pkg else None,
@@ -403,6 +441,7 @@ def create_order(
         status="pending",
         note=order_in.note,
         owner=current_account["username"],
+        extension_package_ids=json.dumps([]),
     )
     db.add(db_order)
     db.commit()
@@ -474,6 +513,7 @@ def list_orders(
                 total_amount=order.total_amount,
                 package_id=order.package_id,
                 package_name=order.package_name,
+                extension_package_ids=order.extension_package_ids,
                 extra_amount=order.extra_amount,
                 payment_method=order.payment_method,
                 commission_amount=order.commission_amount,
@@ -596,6 +636,15 @@ def update_order(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="指定的套餐不存在",
             )
+    elif db_order.package_id:
+        pkg = (
+            db.query(models.ServicePackage)
+            .filter(
+                models.ServicePackage.id == db_order.package_id,
+                models.ServicePackage.owner == current_account["username"],
+            )
+            .first()
+        )
 
     # 重新计算提成快照（使用当前配置）
     commission_amount = 0.0
@@ -641,6 +690,42 @@ def update_order(
     db_order.note = (
         order_in.note if order_in.note is not None else db_order.note
     )
+
+    # 续钟套餐时长累加：extend_minutes 用于增加 booked_minutes
+    if order_in.extend_minutes:
+        db_order.booked_minutes = (db_order.booked_minutes or 0) + order_in.extend_minutes
+    elif pkg and order_in.package_id is not None:
+        # 如果指定了新的套餐，则以新套餐时长作为 booked_minutes；无套餐则保持现值
+        db_order.booked_minutes = pkg.duration_minutes or db_order.booked_minutes or 0
+
+    # 续钟套餐 ID 列表：extend_package_id 追加；extension_package_ids 可直接覆盖
+    ext_ids: list[int] = []
+    if db_order.extension_package_ids:
+        try:
+            ext_ids = json.loads(db_order.extension_package_ids)
+        except Exception:
+            ext_ids = []
+    if order_in.extension_package_ids is not None:
+        ext_ids = order_in.extension_package_ids
+    elif order_in.extend_package_id:
+        ext_ids = ext_ids + [order_in.extend_package_id]
+    db_order.extension_package_ids = json.dumps(ext_ids)
+
+    # 若提供完整扩展包列表，则重算 booked_minutes = 基础套餐 + 续钟套餐总时长
+    if pkg:
+        total_minutes = pkg.duration_minutes or 0
+        if ext_ids:
+            ext_pkgs = (
+                db.query(models.ServicePackage)
+                .filter(models.ServicePackage.id.in_(ext_ids))
+                .all()
+            )
+            ext_map = {p.id: p for p in ext_pkgs}
+            for ext_id in ext_ids:
+                if ext_id in ext_map:
+                    total_minutes += ext_map[ext_id].duration_minutes or 0
+        db_order.booked_minutes = total_minutes
+
     if order_in.status is not None:
         db_order.status = order_in.status
 

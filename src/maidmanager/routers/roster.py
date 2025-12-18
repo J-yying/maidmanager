@@ -2,6 +2,7 @@ from datetime import datetime, time
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
@@ -56,6 +57,37 @@ def get_roster_by_date(
         .all()
     )
     return shifts
+
+
+@router.get(
+    "/marks",
+    response_model=List[str],
+    summary="排班日历标记（按月返回有排班的日期）",
+)
+def get_roster_marks(
+    month: str = Query(..., description="月份 YYYY-MM"),
+    db: Session = Depends(get_db),
+    current_account: dict = Depends(get_current_account),
+) -> List[str]:
+    """返回指定月份内存在排班的日期列表。"""
+    try:
+        datetime.strptime(month, "%Y-%m")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="month 必须是 YYYY-MM 格式",
+        ) from exc
+
+    like_pattern = f"{month}-%"
+    rows = (
+        db.query(func.distinct(models.WorkShift.work_date))
+        .filter(
+            models.WorkShift.work_date.like(like_pattern),
+            models.WorkShift.owner == current_account["username"],
+        )
+        .all()
+    )
+    return [r[0] for r in rows]
 
 
 @router.post(
