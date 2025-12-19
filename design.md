@@ -376,6 +376,11 @@
     | items[].base_salary | float | 底薪 |
     | items[].commission_total | float | 提成总额 |
     | items[].total_salary | float | 应发合计 |
+    | items[].packages | list | 套餐统计 |
+    | items[].packages[].package_id | int | 套餐 ID（可空） |
+    | items[].packages[].package_name | str | 套餐名称 |
+    | items[].packages[].order_count | int | 订单数 |
+    | items[].packages[].total_amount | float | 该套餐相关总金额 |
 - `GET /api/finance/dashboard`
   - 入参：
 

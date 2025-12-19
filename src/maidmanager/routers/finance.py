@@ -62,6 +62,36 @@ def get_salary_slip(
             )
             .scalar()
         )
+
+        pkg_rows = (
+            db.query(
+                models.Order.package_id,
+                models.Order.package_name,
+                func.count(models.Order.id).label("cnt"),
+                func.coalesce(func.sum(models.Order.total_amount), 0.0).label(
+                    "amount"
+                ),
+            )
+            .filter(
+                models.Order.staff_id == staff.id,
+                models.Order.status == "completed",
+                models.Order.order_date.like(like_pattern),
+                models.Order.owner == current_account["username"],
+            )
+            .group_by(models.Order.package_id, models.Order.package_name)
+            .all()
+        )
+        package_stats: list[schemas.SalaryPackageStat] = []
+        for row in pkg_rows:
+            package_stats.append(
+                schemas.SalaryPackageStat(
+                    package_id=row.package_id,
+                    package_name=row.package_name or "未指定套餐",
+                    order_count=row.cnt,
+                    total_amount=float(row.amount or 0.0),
+                )
+            )
+
         base_salary = staff.base_salary or 0.0
         total_salary = base_salary + float(commission_total or 0.0)
         items.append(
@@ -71,6 +101,7 @@ def get_salary_slip(
                 base_salary=base_salary,
                 commission_total=float(commission_total or 0.0),
                 total_salary=total_salary,
+                packages=package_stats,
             )
         )
 

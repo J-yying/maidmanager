@@ -48,6 +48,22 @@
         <el-table-column prop="base_salary" label="底薪" />
         <el-table-column prop="commission_total" label="提成总额" />
         <el-table-column prop="total_salary" label="应发工资" />
+        <el-table-column label="套餐统计" min-width="200">
+          <template #default="{ row }">
+            <div v-if="row.packages && row.packages.length">
+              <div
+                v-for="p in row.packages"
+                :key="`${row.staff_id}-${p.package_id || 'none'}-${p.order_count}`"
+                class="pkg-row"
+              >
+                <span class="pkg-name">{{ p.package_name || "未指定套餐" }}</span>
+                <span class="pkg-count">×{{ p.order_count }}</span>
+                <span class="pkg-amount">￥{{ formatNumber(p.total_amount) }}</span>
+              </div>
+            </div>
+            <span v-else class="muted">-</span>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
 
@@ -164,6 +180,8 @@ const formatHours = (hours) => {
   return `${Number(hours).toFixed(1)} 小时`;
 };
 
+const formatNumber = (v) => Number(v || 0).toFixed(2);
+
 onMounted(() => {
   reloadFinance();
 });
@@ -194,5 +212,26 @@ onMounted(() => {
   font-size: 18px;
   font-weight: 600;
   margin-top: 4px;
+}
+
+.pkg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.pkg-name {
+  color: #333;
+}
+
+.pkg-count,
+.pkg-amount {
+  color: #666;
+}
+
+.muted {
+  color: #999;
 }
 </style>

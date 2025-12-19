@@ -225,6 +225,7 @@ class SalaryItem(BaseModel):
     base_salary: float
     commission_total: float
     total_salary: float
+    packages: List["SalaryPackageStat"] = []
 
 
 class SalarySlipResponse(BaseModel):
@@ -240,6 +241,13 @@ class FinanceDashboardResponse(BaseModel):
     total_salary: float
     total_expenses: float
     net_profit: float
+
+
+class SalaryPackageStat(BaseModel):
+    package_id: Optional[int]
+    package_name: Optional[str]
+    order_count: int
+    total_amount: float
 
 
 class StaffAttendanceItem(BaseModel):
