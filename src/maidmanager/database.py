@@ -1,3 +1,5 @@
+import json
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
@@ -29,6 +31,8 @@ def init_db() -> None:
     _ensure_booked_minutes()
     _dedupe_work_shifts()
     _ensure_indexes()
+    _refresh_commission_snapshot()
+    _refresh_commission_snapshot()
 
 
 def _column_exists(conn, table_name: str, column_name: str) -> bool:
@@ -92,6 +96,104 @@ def _ensure_booked_minutes() -> None:
                     ELSE booked_minutes
                 END
                 """
+            )
+        )
+
+
+def _refresh_commission_snapshot() -> None:
+    """旧数据提成快照重算：基础套餐 + 续钟套餐累加。"""
+    from . import models  # noqa: WPS433
+
+    session = SessionLocal()
+    try:
+        orders = (
+            session.query(models.Order)
+            .filter(models.Order.status != "cancelled")
+            .all()
+        )
+
+        def calc_commission(pkg: models.ServicePackage, staff: models.Staff, owner: str) -> float:
+            if pkg is None or staff is None:
+                return 0.0
+            if staff.commission_type == "percentage":
+                base_amount = pkg.price or 0.0
+                return base_amount * (staff.commission_value or 0.0)
+            if staff.commission_type == "fixed":
+                mapping = (
+                    session.query(models.StaffPackageCommission)
+                    .filter(
+                        models.StaffPackageCommission.staff_id == staff.id,
+                        models.StaffPackageCommission.package_id == pkg.id,
+                        models.StaffPackageCommission.owner == owner,
+                    )
+                    .first()
+                )
+                if mapping:
+                    return mapping.commission_amount or 0.0
+                return pkg.default_commission or 0.0
+            return 0.0
+
+        for order in orders:
+            staff = (
+                session.query(models.Staff)
+                .filter(
+                    models.Staff.id == order.staff_id,
+                    models.Staff.owner == order.owner,
+                )
+                .first()
+            )
+            if not staff:
+                continue
+            base_pkg = (
+                session.query(models.ServicePackage)
+                .filter(
+                    models.ServicePackage.id == order.package_id,
+                    models.ServicePackage.owner == order.owner,
+                )
+                .first()
+                if order.package_id
+                else None
+            )
+            commission_total = calc_commission(base_pkg, staff, order.owner)
+
+            ext_ids: list[int] = []
+            if order.extension_package_ids:
+                try:
+                    parsed = json.loads(order.extension_package_ids)
+                    if isinstance(parsed, list):
+                        ext_ids = [int(v) for v in parsed if isinstance(v, (int, str)) and str(v).isdigit()]
+                except Exception:
+                    ext_ids = []
+            if ext_ids:
+                ext_pkgs = (
+                    session.query(models.ServicePackage)
+                    .filter(
+                        models.ServicePackage.id.in_(ext_ids),
+                        models.ServicePackage.owner == order.owner,
+                    )
+                    .all()
+                )
+                ext_map = {p.id: p for p in ext_pkgs}
+                for ext_id in ext_ids:
+                    pkg = ext_map.get(ext_id)
+                    if pkg:
+                        commission_total += calc_commission(pkg, staff, order.owner)
+
+            order.commission_amount = float(commission_total or 0.0)
+
+        session.commit()
+    finally:
+        session.close()
+
+
+def _refresh_commission_snapshot() -> None:
+    """旧数据提成快照重算为基础套餐+续钟套餐提成累加。"""
+    with engine.begin() as conn:
+        # 填充缺失的续钟列表字段
+        conn.execute(
+            text(
+                "UPDATE orders SET extension_package_ids = '[]' "
+                "WHERE extension_package_ids IS NULL"
             )
         )
 

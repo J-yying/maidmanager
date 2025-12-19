@@ -48,22 +48,6 @@
         <el-table-column prop="base_salary" label="底薪" />
         <el-table-column prop="commission_total" label="提成总额" />
         <el-table-column prop="total_salary" label="应发工资" />
-        <el-table-column label="套餐统计" min-width="200">
-          <template #default="{ row }">
-            <div v-if="row.packages && row.packages.length">
-              <div
-                v-for="p in row.packages"
-                :key="`${row.staff_id}-${p.package_id || 'none'}-${p.order_count}`"
-                class="pkg-row"
-              >
-                <span class="pkg-name">{{ p.package_name || "未指定套餐" }}</span>
-                <span class="pkg-count">×{{ p.order_count }}</span>
-                <span class="pkg-amount">￥{{ formatNumber(p.total_amount) }}</span>
-              </div>
-            </div>
-            <span v-else class="muted">-</span>
-          </template>
-        </el-table-column>
       </el-table>
     </el-card>
 
@@ -229,6 +213,9 @@ onMounted(() => {
 .pkg-count,
 .pkg-amount {
   color: #666;
+}
+.pkg-commission {
+  color: #409eff;
 }
 
 .muted {

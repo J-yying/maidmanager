@@ -68,8 +68,9 @@ def get_salary_slip(
                 models.Order.package_id,
                 models.Order.package_name,
                 func.count(models.Order.id).label("cnt"),
-                func.coalesce(func.sum(models.Order.total_amount), 0.0).label(
-                    "amount"
+                func.coalesce(func.sum(models.Order.total_amount), 0.0).label("amount"),
+                func.coalesce(func.sum(models.Order.commission_amount), 0.0).label(
+                    "commission"
                 ),
             )
             .filter(
@@ -89,6 +90,7 @@ def get_salary_slip(
                     package_name=row.package_name or "未指定套餐",
                     order_count=row.cnt,
                     total_amount=float(row.amount or 0.0),
+                    total_commission=float(row.commission or 0.0),
                 )
             )
 

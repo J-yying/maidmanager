@@ -23,6 +23,36 @@ def _parse_dt(raw: str) -> datetime:
         ) from exc
 
 
+def _calc_commission_for_package(
+    pkg: Optional[models.ServicePackage],
+    staff: models.Staff,
+    owner: str,
+    db: Session,
+) -> float:
+    if pkg is None:
+        return 0.0
+
+    if staff.commission_type == "percentage":
+        base_amount = pkg.price or 0.0
+        return base_amount * (staff.commission_value or 0.0)
+
+    if staff.commission_type == "fixed":
+        mapping = (
+            db.query(models.StaffPackageCommission)
+            .filter(
+                models.StaffPackageCommission.staff_id == staff.id,
+                models.StaffPackageCommission.package_id == pkg.id,
+                models.StaffPackageCommission.owner == owner,
+            )
+            .first()
+        )
+        if mapping:
+            return mapping.commission_amount or 0.0
+        return pkg.default_commission or 0.0
+
+    return 0.0
+
+
 @router.get(
     "/orders/day_view",
     response_model=List[schemas.StaffDaySchedule],
@@ -399,30 +429,9 @@ def create_order(
         )
 
     # 计算提成快照
-    commission_amount = 0.0
-    if staff.commission_type == "percentage":
-        # 比例模式下，以套餐价格为提成基数；若无套餐则退回实收金额
-        base_amount = pkg.price if pkg is not None else order_in.total_amount
-        commission_amount = base_amount * (staff.commission_value or 0.0)
-    elif staff.commission_type == "fixed":
-        # 固定模式下，优先按「员工 × 套餐」配置计算提成
-        if pkg is None:
-            commission_amount = 0.0
-        else:
-            mapping = (
-                db.query(models.StaffPackageCommission)
-                .filter(
-                    models.StaffPackageCommission.staff_id == staff.id,
-                    models.StaffPackageCommission.package_id == pkg.id,
-                    models.StaffPackageCommission.owner
-                    == current_account["username"],
-                )
-                .first()
-            )
-            if mapping:
-                commission_amount = mapping.commission_amount or 0.0
-            else:
-                commission_amount = pkg.default_commission or 0.0
+    commission_amount = _calc_commission_for_package(
+        pkg, staff, current_account["username"], db
+    )
 
     db_order = models.Order(
         staff_id=order_in.staff_id,
@@ -646,27 +655,10 @@ def update_order(
             .first()
         )
 
-    # 重新计算提成快照（使用当前配置）
-    commission_amount = 0.0
-    if staff.commission_type == "percentage":
-        base_amount = pkg.price if pkg is not None else total_amount
-        commission_amount = base_amount * (staff.commission_value or 0.0)
-    elif staff.commission_type == "fixed":
-        if pkg is None:
-            commission_amount = 0.0
-        else:
-            mapping = (
-                db.query(models.StaffPackageCommission)
-                .filter(
-                    models.StaffPackageCommission.staff_id == staff.id,
-                    models.StaffPackageCommission.package_id == pkg.id,
-                )
-                .first()
-            )
-            if mapping:
-                commission_amount = mapping.commission_amount or 0.0
-            else:
-                commission_amount = pkg.default_commission or 0.0
+    # 重新计算提成快照（使用当前配置，基础套餐 + 续钟套餐叠加）
+    commission_amount = _calc_commission_for_package(
+        pkg, staff, current_account["username"], db
+    )
 
     # 应用变更
     db_order.customer_name = (
@@ -725,6 +717,18 @@ def update_order(
                 if ext_id in ext_map:
                     total_minutes += ext_map[ext_id].duration_minutes or 0
         db_order.booked_minutes = total_minutes
+
+    # 续钟套餐提成：在基础套餐提成基础上累加续钟套餐提成
+    if pkg and ext_ids:
+        ext_pkgs = (
+            db.query(models.ServicePackage)
+            .filter(models.ServicePackage.id.in_(ext_ids))
+            .all()
+        )
+        for ext in ext_pkgs:
+            commission_amount += _calc_commission_for_package(
+                ext, staff, current_account["username"], db
+            )
 
     if order_in.status is not None:
         db_order.status = order_in.status

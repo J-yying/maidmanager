@@ -248,6 +248,7 @@ class SalaryPackageStat(BaseModel):
     package_name: Optional[str]
     order_count: int
     total_amount: float
+    total_commission: float
 
 
 class StaffAttendanceItem(BaseModel):

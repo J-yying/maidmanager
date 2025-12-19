@@ -22,6 +22,22 @@
         <el-table-column prop="base_salary" label="底薪" />
         <el-table-column prop="commission_total" label="提成总额" />
         <el-table-column prop="total_salary" label="应发工资" />
+        <el-table-column label="套餐提成明细" min-width="220">
+          <template #default="{ row }">
+            <div v-if="row.packages && row.packages.length" class="pkg-list">
+              <div
+                v-for="p in row.packages"
+                :key="`${row.staff_id}-${p.package_id || 'none'}-${p.order_count}`"
+                class="pkg-row"
+              >
+                <span class="pkg-name">{{ p.package_name || "未指定套餐" }}</span>
+                <span class="pkg-count">×{{ p.order_count }}</span>
+                <span class="pkg-commission">提成￥{{ formatNumber(p.total_commission) }}</span>
+              </div>
+            </div>
+            <span v-else class="muted">-</span>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
   </div>
@@ -38,6 +54,8 @@ const salarySlip = ref({
   month: "",
   items: []
 });
+
+const formatNumber = (v) => Number(v || 0).toFixed(2);
 
 const reload = async () => {
   if (!selectedMonth.value) return;
@@ -68,5 +86,33 @@ onMounted(() => {
   gap: 8px;
   align-items: center;
 }
-</style>
 
+.pkg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pkg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.pkg-name {
+  color: #333;
+}
+
+.pkg-count {
+  color: #666;
+}
+
+.pkg-commission {
+  color: #409eff;
+}
+
+.muted {
+  color: #999;
+}
+</style>
